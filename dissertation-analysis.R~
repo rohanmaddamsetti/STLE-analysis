@@ -1,0 +1,268 @@
+## dissertation-analysis.R by Rohan Maddamsetti.
+
+## This script makes figures and does statistics for the recombinant genome analysis.
+
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+
+labeled.mutations <- tbl_df(read.csv("../results/labeled_mutations.csv"))
+G.score.data <- tbl_df(read.csv("../results/036806-3.csv"))
+hand.annotation <- tbl_df(read.csv("../results/donor_hand_annotation.csv"))
+
+## label genomes as odd or even.
+genome.names <- levels(labeled.mutations$genome)
+is.odd <- sapply(genome.names, function(x) ifelse(strtoi(substr(x,nchar(x),nchar(x)))%%2, TRUE,FALSE))
+
+labeled.mutations <- mutate(labeled.mutations,odd=is.odd[genome],lbl=as.factor(lbl))
+odd.genomes <- filter(labeled.mutations, odd==TRUE)
+even.genomes <- filter(labeled.mutations, odd==FALSE)
+##TODO: change the code to split the data into odd and even bits at the end,
+## NOT at the start.
+
+
+###############################################
+## make Figure 1.
+
+## REL606 markers are negative space on the plot.
+## draw and label vertical lines on the plot for high G-score mutations.
+no.B.genomes <- filter(labeled.mutations,lbl!=0)
+## this last bit is a cheap hack to label the genes at the top of the plot...
+
+##annotate auxotrophs and Hfr oriTs on the plot.
+auxotrophs <- filter(hand.annotation,annotation!="Hfr"&annotation!="oriC") %>% mutate(lineage="Ara+1")
+## this last bit is a cheap hack to label the auxotrophs at the bottom of the plot...
+
+hfrs.and.origin <- filter(hand.annotation,annotation=="Hfr"|annotation=="oriC") %>% mutate(lineage="Ara+2")
+## this last bit is a cheap hack to make annotations in an open region of the plot...
+
+
+## break Figure 1 into 6 panels, two lineages per page (both clones on a page).
+no.B.genomes1 <- filter(no.B.genomes,lineage== "Ara+1")
+
+makeFig1panel <- function(fig1data,G.score.data) {
+    top.G.score.genes <- filter(G.score.data,G.score>8.9)  %>% mutate(lineage="Ara+1")
+ggplot(fig1data, aes(x=position,y=genome, colour=lbl)) + geom_point(shape=108) + scale_colour_manual(values=c('yellow', 'red', 'black','green')) + theme_classic() + xlab("Position") + ylab("Lineage") + guides(colour=FALSE) +
+    ## add top G-score genes
+    geom_vline(data=top.G.score.genes, aes(xintercept=Start.position),size=0.1) #+ geom_text_repel(data=top.G.score.genes,aes(x=Start.position,y=lineage,label=Gene.name),inherit.aes=FALSE, size=2,nudge_y=1) ##+
+    ## add auxotroph lines
+    #geom_vline(data=auxotrophs,aes(xintercept=position),size=0.1,linetype="dashed") +
+    ## add annotation of Hfr and oriC on chromosome?
+##    geom_text_repel(data=hfrs.and.origin,aes(x=position,y=lineage,label=Hfr.orientation),inherit.aes=FALSE,size=2,nudge_y=-0.5)
+}
+
+test <- makeFig1panel(no.B.genomes1,G.score.data)
+
+
+
+ggsave("/Users/Rohandinho/Desktop/test.pdf", test)
+
+no.B.odd.genomes <- filter(odd.genomes,lbl!=0)
+no.B.even.genomes <- filter(even.genomes,lbl!=0)
+
+## label the top 55 G-scoring genes with symbols.
+## below this threshold, very short genes with 1 dN have a high G-score.
+top.G.score.genes <- filter(G.score.data,G.score>8.9)
+special.hits <- filter(no.B.even.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
+    filter(lbl=='2' | lbl=='4' | lbl=='3')
+
+
+LTEE.special.hits <- filter(no.B.even.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>% filter(lbl=='2' | lbl=='4')
+
+
+test2 <- ggplot(no.B.even.genomes, aes(x=position,y=lineage, colour=lbl)) + geom_point(shape=124) + scale_colour_manual(values=c('yellow', 'red', 'black','green')) + theme_classic() + xlab("Position") + ylab("Lineage") + guides(colour=FALSE)+
+    ## annotate mutations in top G-score genes.
+    geom_point(data=special.hits,aes(x=position,y=lineage,color=lbl,shape=mut.annotation)) + geom_vline(data=filter(top.G.score.genes,Gene.name %in% LTEE.special.hits$gene.annotation), aes(xintercept=Start.position),size=0.1) #+ geom_text(data=filter(top.G.score.genes,Gene.name %in% LTEE.special.hits$gene.annotation),aes(x=position,y=lineage,label=gene.annotation),inherit.aes=FALSE, size=2,nudge_y=1)
+
+ggsave("/Users/Rohandinho/Desktop/test2.pdf", test2,width=10,height=8)
+
+
+
+
+#########################
+
+Fig1B <- ggplot(no.B.even.genomes, aes(x=position,y=lineage, colour=lbl)) + geom_point(shape=108) + scale_colour_manual(values=c('yellow', 'red', 'black','green')) + theme_classic() + xlab("Position") + ylab("Lineage") + guides(colour=FALSE)+
+    ## add top G-score genes
+    geom_vline(data=top.G.score.genes, aes(xintercept=Start.position),size=0.1) + geom_text_repel(data=top.G.score.genes,aes(x=Start.position,y=lineage,label=Gene.name),inherit.aes=FALSE, size=2,nudge_y=1) #+
+    ## add annotation of Hfr and oriC on chromosome?
+##    geom_text_repel(data=hfrs.and.origin,aes(x=position,y=lineage,label=Hfr.orientation),inherit.aes=FALSE,size=2,nudge_y=-0.5)
+
+
+ggsave("/Users/Rohandinho/Desktop/Fig1B.pdf", Fig1B)
+
+#############################################################
+## Figures 2. Visual comparisons of parallel recombination across lineages
+## with the G-score of mutations over the genome, and with the occurrence of
+## new mutations over the genome.
+## This is only made with odd genomes at the moment.
+
+#initialize introgression.score column.
+odd.genomes <- mutate(odd.genomes, introgression.score = 0)
+
+##This is a little helper to sum up labels (which is a factor)
+label.levels <- levels(labeled.mutations$lbl)
+labels.to.int <- sapply(label.levels, function(x) strtoi(x))
+
+##take all positions labeled with 1, and sum them up to get the introgression score.
+## omit Ara-3 (all K-12).
+scored.odd.genomes <- filter(odd.genomes,lineage != "Ara-3") %>%
+    filter(lbl=='1' | lbl=='0') %>%
+    group_by(position) %>%
+    summarize(introgression.score = sum(labels.to.int[lbl]))
+
+## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
+new.odd.mutations <- filter(odd.genomes,lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>%
+    filter(lbl=='3')
+
+## FILTER NEW MUTATIONS FOR KNOWN FALSE POSITIVES.
+
+## how many new mutations occur in top G.score genes?
+top.G.score.genes <- filter(G.score.data,G.score>8.9)
+
+top.new.odd.mutations <- filter(new.odd.mutations,gene.annotation %in% top.G.score.genes$Gene.name)
+
+Fig2A <- ggplot(scored.odd.genomes, aes(x=position,y=introgression.score)) + geom_line() + theme_classic() + xlab("Position") + ylab("Introgression Score") +
+    ## add auxotroph lines
+    geom_vline(data=auxotrophs,aes(xintercept=position),size=0.1,linetype="dashed") +
+    geom_text_repel(data=auxotrophs,aes(x=position,y=8.2,label=annotation),inherit.aes=FALSE, size=2) +
+    ## add annotation of Hfr and oriC on chromosome.
+   geom_text_repel(data=hfrs.and.origin,aes(x=position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=2,nudge_y=-0.3)
+
+Fig2B <- ggplot(new.odd.mutations,aes(x=position,fill=mut.type)) + geom_histogram() + ylab("New mutation count") + theme_classic() + theme(legend.position="bottom") + xlab("Position") + scale_fill_discrete(name="Mutation type")
+
+ggsave("/Users/Rohandinho/Desktop/Fig2A.pdf",Fig2A)
+ggsave("/Users/Rohandinho/Desktop/Fig2B.pdf",Fig2B)
+
+#######################################################
+## Map recombination breakpoints. Currently breakpoints occur ON
+## mutations, NOT between mutations.
+## Make Figure 3 (chunk length distributions) and do two statistical tests:
+## Distance between new mutations and breakpoints (are breakpoints mutagenic?)
+## recombination hot and cold spots
+
+##global variable used in Fig. 3 code.
+REL606.GENOME.LENGTH <- 4629812
+
+## This function maps a vector of labels to a vector of transitions between
+## chunks from K-12 and chunks from LTEE recipient.
+## '1-2' is a start of a K-12 chunk,
+## '2-1' is the start of a LTEE chunk,
+## '0' marks positions in between breakpoints.
+## NOTE: in reality breakpoints lie between the i-1 and ith markers,
+## whereas this code places breakpoints at the ith marker,
+## so these lengths are an approximation at best.
+
+## It would be GREAT if I could write this without a for loop,
+## this is a 15 second speed bottleneck.
+
+
+############################  IMPORTANT BUG TO FIX!!!!
+############################  THIS CODE DOES NOT HANDLE DELETIONS OR INSERTIONS.
+
+
+labels.to.chunks <- function(labelz) {
+    chunks <- rep('0',length(labelz))
+    ## in.K12.chunk might not be FALSE at the first marker in the genome.
+    ## the final if statement in the function checks this assumption.
+    in.K12.chunk <- FALSE
+    last.transition.index <- 1
+    for (i in 1:length(labelz)) {
+        # handle transitions from K-12 to LTEE and vice-versa.
+        if (!in.K12.chunk & (labelz[i] == '1'|labelz[i] == '4')) {
+            in.K12.chunk <- TRUE
+            chunks[i] <- '1-2'
+            last.transition.index <- i
+        } else if (in.K12.chunk & (labelz[i] == '0'|labelz[i] == '2')) {
+            in.K12.chunk <- FALSE
+            chunks[i] <- '2-1'
+            last.transition.index <- i
+        }
+    }
+    ## if the last transition in chunks is '1-2', then the first index
+    ## should be '0', not '1-2' (in.K12.chunk was TRUE!).
+    if (chunks[1] == '1-2' & chunks[last.transition.index] == '1-2')
+        chunks[1] <- '0'
+
+    return(chunks)
+}
+
+## The group_by call is important, so that different genomes are processed
+## separately.
+odd.genome.chunks <- group_by(odd.genomes, lineage) %>%
+    mutate(chunk.transitions=labels.to.chunks(lbl)) %>%
+    filter(chunk.transitions =='1-2'|chunk.transitions=='2-1') %>%
+## position - lag(position) gives the distance between the previous transition
+## marker. So, there are N-1 chunk lengths for N markers (first entry is NA).
+    mutate(chunk.length=position-lag(position)) %>%
+## since genomes are circular, we add up the chunks at the beginning and
+## end of each genome and assign to the first entry of chunk.length.
+##(start of first chunk + genome.length-start of last chunk.
+    mutate(chunk.length=replace(chunk.length,is.na(chunk.length),
+                                position[1]+REL606.GENOME.LENGTH-position[n()]))
+
+## If a chunk.transition is '1-2', the corresponding chunk length is LTEE (1).
+## If a chunk.transition is '2-1', the corresponding chunk length is K-12 (2).
+## This is because of the position-lag(position) code.
+
+K12.chunks <- filter(odd.genome.chunks,chunk.transitions=='2-1')
+LTEE.chunks <- filter(odd.genome.chunks,chunk.transitions=='1-2')
+
+Fig3A <- ggplot(K12.chunks, aes(x=log10(chunk.length),fill=lineage)) + geom_histogram() + facet_grid(lineage ~ .) + theme_classic() + xlab("log10(donor chunk length)") + ylab("Count")
+
+ggsave("/Users/Rohandinho/Desktop/Fig3A.pdf",Fig3A)
+
+Fig3B <- ggplot(LTEE.chunks,aes(x=log10(chunk.length),fill=lineage)) + geom_histogram() + facet_grid(lineage ~ .) + theme_classic() + xlab("log10(recipient chunk length)") + ylab("Count")
+
+ggsave("/Users/Rohandinho/Desktop/Fig3B.pdf",Fig3B)
+
+## NOTE! This test was done by inputting odd.genomes2 in the group_by call
+## for odd.genome.chunks to remove mutators and obviously different genomes.
+## STATISTICAL TEST:
+## are the distributions of K-12 chunks (or LTEE chunks)
+## identical across replicate recombinant lines? Answer: similar, but not draws
+## from the same distribution.
+
+## at least one lineage has a different distribution of K-12 chunk lengths
+kruskal.test(chunk.length ~ lineage, data=K12.chunks)
+
+## distribution of LTEE chunk lengths are somewhat similar across lineages.
+kruskal.test(chunk.length ~ lineage, data=LTEE.chunks)
+
+## omit mutators and weird ones.
+skip.me <- c("Ara+2","Ara-3","Ara-2", "Ara+3", "Ara+6")
+kruskal.test(chunk.length ~ lineage, data=filter(K12.chunks,!lineage %in% skip.me))
+kruskal.test(chunk.length ~ lineage, data=filter(LTEE.chunks,!lineage %in% skip.me))
+
+## STATISTICAL TEST:
+## Is there evidence that recombination breakpoints are mutagenic?
+## TODO: find out what the average minimum distance is between new mutations
+## labeled '3' and breakpoints.
+## Then, drop mutations at random, and calculate average minimum distance to breakpoints.
+## repeat 10000 times to calculate a p-value.
+odd.breaks.and.muts <- filter(odd.genome.chunks, chunk.transitions=='2-1' | chunk.transitions=='1-2' | lbl == '3')
+odd.breaks.and.muts <- select(odd.genome.chunks,lineage,genome,mut.type,position,mut.annotation,chunk.transitions,lbl)
+
+
+############################
+## Additional figures.
+
+## Figure 4. Density of differences between K-12 and REL606.
+
+K12.diff.data <- tbl_df(read.csv("../results/K-12-differences.csv"))
+
+Fig4 <- ggplot(K12.diff.data, aes(x=position)) + geom_histogram(bins=400) + theme_classic() + xlab("Position") + ylab("Count")
+
+## Figure S1. Density of LTEE mutations in recipient clones.
+
+LTEE.marker.data <- tbl_df(read.csv("../results/LTEE-recipient-markers.csv"))
+## omit mutator lineages (Ara+6,Ara+3,Ara-2)
+LTEE.marker.data <- filter(LTEE.marker.data,lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2")
+FigS1 <- ggplot(LTEE.marker.data, aes(x=position),colour='purple') + geom_histogram(bins=400) + theme_classic() + xlab("Position") + ylab("Count")
+
+## Figure S2. plot G-scores of mutations over the genome.
+FigS2 <- ggplot(G.score.data, aes(x=Start.position,y=G.score)) + geom_point(size=0.5) + theme_classic() + geom_text(data=filter(G.score.data,G.score>45),aes(label=Gene.name),size=2,hjust=-0.2) + xlab("Position") + ylab("Count")
+
+
+ggsave("/Users/Rohandinho/Desktop/Fig4.pdf",Fig4)
+ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1)
+ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2)
