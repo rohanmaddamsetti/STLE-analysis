@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-## align_special_cases.py by Rohan Maddamsetti.
+## align_erased_mutations.py by Rohan Maddamsetti.
 
 from os.path import join, basename, exists
 from os import listdir, makedirs, chdir, getcwd
@@ -115,8 +115,8 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
     assert not (make_protein_aln and upstream_bool)
 
     proj_dir = "/Users/Rohandinho/Desktop/Projects/recombinant-assembly/"
-    align_f = open(join(proj_dir,"results/align_these.csv"))
-
+    ##align_f = open(join(proj_dir,"results/align_these.csv"))
+    ## FIX: align all SNPs output my
     genes_to_align = []
     for i,line in enumerate(align_f):
         if i == 0:
@@ -157,7 +157,7 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
     for x in REL606_seqs:
         alignment_dict[x]['REL606'] = str(REL606_seqs[x])
 
-    fasta_base = join(proj_dir,"results/special-alignments/")
+    fasta_base = join(proj_dir,"results/erased-alignments/")
 
     ## write BLAST queries to file.
     REL606_plus1_query_file = join(fasta_base,'Ara+1/REL606_queries.fasta')
@@ -235,7 +235,7 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
 
 def main():
 
-    ## Usage: python align_special_cases.py > special-alignments.txt
+    ## Usage: python align_erased_SNPs.py
 
     #prot_dict = make_alignments(upstream_bool=False,make_protein_aln=True)
     #print_alns(prot_dict,3)

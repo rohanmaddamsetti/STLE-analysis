@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 
-## align_special_cases.py by Rohan Maddamsetti.
-
-## TODO: include upstream regions (perhaps downstream too) in alignments,
-## basically to check for K-12 markers that are informative of recombination.
-## for now, use feature.extract (also is a nice check for errors when
-## taking upstream and downstream regions and having to take strand into account.
+## align_erased_SNPs.py by Rohan Maddamsetti.
 
 from os.path import join, basename, exists
 from os import listdir, makedirs, chdir, getcwd
@@ -25,9 +20,6 @@ from Bio import AlignIO
 from copy import deepcopy
 
 def get_gene_and_201bp_upstream(genefeature,genomeseq):
-    ## NOTE: there is a possible BUG involved with the slicing...be careful!
-    ## get the start and end coordinates of the feature
-    ## as well as strand information.
     mystart = genefeature.location.start
     myend = genefeature.location.end
     mystrand = genefeature.location.strand
@@ -244,8 +236,9 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
 def main():
 
     ## Usage: python align_special_cases.py > special-alignments.txt
-    prot_dict = make_alignments(upstream_bool=False,make_protein_aln=True)
-    print_alns(prot_dict,3)
+
+    #prot_dict = make_alignments(upstream_bool=False,make_protein_aln=True)
+    #print_alns(prot_dict,3)
 
     ## as a sanity check, compare the upstream run to the run that simply extracts the
     ## ORF in a different text file.

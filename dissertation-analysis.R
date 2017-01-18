@@ -6,15 +6,179 @@ library(ggplot2)
 library(ggrepel)
 library(dplyr)
 
-labeled.mutations <- tbl_df(read.csv("../results/labeled_mutations.csv"))
-labeled.mutations <- mutate(labeled.mutations,lbl=as.factor(lbl))
-G.score.data <- tbl_df(read.csv("../results/036806-3.csv"))
-hand.annotation <- tbl_df(read.csv("../results/donor_hand_annotation.csv"))
+## function to rotate genome coordinates, setting oriC at the center of plots.
+rotate.chr <- function(my.position) {
+    REL606.LENGTH <- 4629812
+    ORIC <- 3886105
+    midpoint <- REL606.LENGTH/2
+    L <- ORIC - midpoint
+    ifelse(my.position > L,my.position-ORIC,REL606.LENGTH-ORIC+my.position)
+}
 
-####################
+## For each dataset, add rotated genome coordinates so that oriC is at the center of the chromosome in plots.
+hand.annotation <- tbl_df(read.csv("../results/donor_hand_annotation.csv")) %>%
+    mutate(rotated.position=rotate.chr(position))
+
+G.score.data <- tbl_df(read.csv("../results/036806-3.csv")) %>%
+    mutate(rotated.Start.position=rotate.chr(Start.position))
+
+## clone sequencing data.
+labeled.mutations <- tbl_df(read.csv("../results/labeled_mutations.csv")) %>% mutate(lbl=as.factor(lbl)) %>%
+    mutate(rotated.position=rotate.chr(position))
+
+## label clones as odd or even.
+genome.names <- levels(labeled.mutations$genome)
+is.odd <- sapply(genome.names, function(x) ifelse(strtoi(substr(x,nchar(x),nchar(x)))%%2, TRUE,FALSE))
+labeled.mutations <- mutate(labeled.mutations,odd=is.odd[genome])
+
+## evolution experiment data.
+evoexp.labeled.mutations <- tbl_df(read.csv("../results/evolution-experiment/evoexp_labeled_mutations.csv")) %>%
+    mutate(lbl=as.factor(lbl)) %>% mutate(rotated.position=rotate.chr(position))
+
+
+####################################################################################################
+## Analyze evolution experiment results.
+
+## Things to double-check:
+## 1) are new mutations (3) real or artifactual?
+## 2) are all the K-12 fixations (1,6,7,8,9) real?
+
+evoexp.data <- evoexp.labeled.mutations %>%
+    mutate(generation=ifelse(grepl('149',genome),1000,1200)) %>%
+    mutate(frequency=ifelse(is.na(frequency),0,frequency))
+
+## A reminder to what the labels are.
+## 0) reference genome state.
+## 1) B/K-12 marker is present that is not in reference genome (yellow)
+## 2) LTEE recipient mutations (red)
+## 3) new mutations (black)
+## 4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
+## 5) deleted markers (marker falls in a deleted region).
+## 6) REL288 specific marker
+## 7) REL291 specific marker
+## 8) REL296 specific marker
+## 9) REL298 specific marker
+
+## first, plot each lineage on a different panel. On each panel, plot both initial and final timepoint.
+## second, plot (final - initial) allele frequency for each lineage.
+for (l in levels(evoexp.data$lineage)) {
+    ## for now filter out 'new' mutations.
+    l.data <- filter(evoexp.data,lineage == l,lbl %in% c(0,1,2,6,7,8,9))
+    l.panel <- ggplot(l.data,aes(x=position,y=frequency)) + geom_line() + facet_grid(generation ~ .) + theme_classic() + ggtitle(l)
+    #ggsave(l.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/",l,"_evolexp.pdf"))
+
+    ## get final - initial allele frequency, and drop generation column as meaningless (b/c took the difference)
+    l.delta.data <- l.data %>% arrange(position,generation) %>% group_by(position) %>%
+        mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
+    delta.panel <- ggplot(l.delta.data,aes(x=position,y=delta.freq)) + geom_line() + theme_classic() + ggtitle(l)
+    ggsave(delta.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/",l,"_delta.pdf"))
+}
+
+###  1) sum data across LTEE lines to look for selection (only look at dN)
+parallel.delta.freq <- evoexp.data %>% filter(mut.annotation=='dN') %>%
+    arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
+    mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation) %>%
+    group_by(position) %>% summarise(sum.delta.freq=sum(delta.freq))
+
+sum.delta.plot <- ggplot(parallel.delta.freq,aes(x=position,y=sum.delta.freq)) + geom_line() + theme_classic() + ggtitle('WHAT?')
+ggsave(sum.delta.plot,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/","sumplot.pdf"))
+
+## now omit Ara+1 and Ara-3 (only look at dN)
+parallel.delta.freq2 <- evoexp.data %>% filter(mut.annotation=='dN') %>%
+    filter(lineage !='Ara+1') %>%
+    filter(lineage!='Ara-3') %>%
+    arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
+    mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation) %>%
+    group_by(position) %>% summarise(sum.delta.freq=sum(delta.freq))
+
+sum.delta.plot2 <- ggplot(parallel.delta.freq2,aes(x=position,y=sum.delta.freq)) + geom_line() + theme_classic() + ggtitle('HUH?')
+ggsave(sum.delta.plot2,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/","sumplot2.pdf"))
+
+## now, look at mutations where the magnitude of sum delta freq is >=2.
+interesting.delta.pos <- filter(parallel.delta.freq,abs(sum.delta.freq)>=2)
+interesting.delta.muts <- filter(evoexp.data,position %in% interesting.delta.pos$position)
+unique(interesting.delta.muts$gene.annotation)
+
+### 2) look at delta freq in mutations found in the clones: what is the fate of these
+###    lineages? these mutations should be more or less correlated.
+
+for (g in levels(labeled.mutations$genome)) {
+    g.data <- filter(labeled.mutations,genome==g)
+    ## This next line doesn't strictly test for equality but probably good enough.
+    clone.lineage <- filter(evoexp.data,lineage %in% g.data$lineage,position %in% g.data$position)
+    clone.delta.freq <- clone.lineage %>%
+        arrange(position,generation) %>% group_by(position) %>%
+        mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
+
+    clone.panel <- ggplot(clone.delta.freq,aes(x=position,y=delta.freq)) + geom_line() + theme_classic() + ggtitle(g)
+    ggsave(clone.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/clone_plots/",g,"_delta.pdf"))
+
+    ## also make a plot of mutations that are in the pop. but not in this clone.
+    clone.complement <- filter(evoexp.data,lineage %in% g.data$lineage,
+                               !position %in% g.data$position)
+
+    complement.delta.freq <- clone.complement %>%
+        arrange(position,generation) %>% group_by(position) %>%
+        mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
+
+    complement.panel <- ggplot(complement.delta.freq,aes(x=position,y=delta.freq)) + geom_line() + theme_classic() + ggtitle(g)
+    ggsave(complement.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/clone_complement_plots/",g,"_delta.pdf"))
+
+}
+
+
+
+####################################################
+##DATA CONSISTENCY CHECKS: what should I do about it? ... MORE TO DO HERE!
+
+## after filtering out the mutator lineages Ara+6 and Ara+3, only 3 missing recipient mutations,
+## and two are probable false positives.
+recipient.muts <- filter(evoexp.data,lbl==2)
+d.recipient.muts <- recipient.muts %>% arrange(position,generation) %>% group_by(position) %>%
+    mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation) %>%
+    filter(delta.freq != 0) %>% filter(lineage != 'Ara+6') %>% filter(lineage != 'Ara+3')
+
+## make sure that all K-12 mutations fixed in the populations are also fixed in the clones
+## ALSO-- find problematic cases where 100% mutations in populations are not in clones.
+
+evoexp.fixations <- evoexp.data %>% filter(frequency==1)
+K12.evoexp.fixations <- evoexp.fixations %>% filter(lbl==1,generation==1000) %>% select(-genome,-frequency,-generation,-gene.annotation,-mutation)
+K12.clone.muts <- labeled.mutations %>% filter(lbl==1) %>% select(-genome,-frequency,-gene.annotation,-mutation)
+problem.fixations <- setdiff(K12.evoexp.fixations,K12.clone.muts)
+## There are 2,557 mutations which are 'fixed' in the pops, but not in the clones.
+## The best guess is that these are high-frequency mutations not found in the clones.
+## How do I know that these are not false positives?
+
+## what about erased mutations in the evolution experiment? How do these compare to erased
+## mutations in the clones?
+
+pop.erased.muts <- filter(evoexp.data2,lbl==4) %>% select(-genome,-frequency)
+clone.erased.muts <- filter(labeled.mutations,lbl==4) %>% select(-genome,-frequency)
+
+pop.erased.muts2 <- select(pop.erased.muts,-mut.annotation,-gene.annotation,-mutation,-generation)
+clone.erased.muts2 <- select(clone.erased.muts,-mut.annotation,-gene.annotation,-mutation)
+problems.erased <- setdiff(pop.erased.muts2,clone.erased.muts2)
+## There are 152 problem erased mutations in the pop data. which are these?
+pop.problem.erased.muts <- filter(pop.erased.muts,position %in%problems.erased$position)
+
+
+
+####################################################################################################
+## Erased mutations. Write to file and take a look.
+clone.erased.dN <- filter(labeled.mutations,lbl==4,mut.annotation=='dN') %>% select(-genome,-frequency)
+write.csv(clone.erased.dN,"/Users/Rohandinho/Desktop/clone_erased_dN.csv")
+
+#### Make in-depth alignments of erased mutations in Ara+1 and Ara-4.
 ## print out a csv of specific case genes for Biopython to align.
-special.gene.list <- labeled.mutations %>% filter(lineage == 'Ara+1'|lineage == 'Ara-4') %>% filter(lbl=='4') %>% select(gene.annotation,lineage) %>% group_by(gene.annotation) %>% filter(row_number() == 1)
-write.csv(special.gene.list,"../results/align_these.csv")
+#special.gene.list <- labeled.mutations %>% filter(lineage == 'Ara+1'|lineage == 'Ara-4') %>% filter(lbl=='4') %>% select(gene.annotation,lineage) %>% group_by(gene.annotation) %>% filter(row_number() == 1)
+#write.csv(special.gene.list,"../results/old_align_these.csv")
+
+#### Make in-depth alignments of all erased mutations, with special attention to Ara+1 and Ara-4.
+#### Print out a csv of genes for align_erased_mutations.py to align,
+#### and annotate as 0) reversion to pre-LTEE state, 1) K-12 state, 3) new allele.
+
+#### Only look at mutations in odd clones.
+erased.gene.list <- filter(labeled.mutations,lbl==4) %>% select(gene.annotation,lineage)
 
 ###############################################
 ## make Figure 1.
@@ -32,7 +196,7 @@ makeFig1panel <- function(labeled.mutations,G.score.data,l1,l2,l3) {
         mutate(genome=factor(genome,levels=rev(levels(genome)))) %>%
         filter(lineage==l1 | lineage==l2 | lineage==l3) %>%
         mutate(y.center=70-match(genome,unique(genome))*10,
-               x1=position,x2=position,y1=y.center-3,y2=y.center+3) %>%
+               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3) %>%
         mutate(lbl=as.factor(lbl))
 
  ## label the top 54 G-scoring genes with symbols.
@@ -45,27 +209,28 @@ makeFig1panel <- function(labeled.mutations,G.score.data,l1,l2,l3) {
     LTEE.top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
         filter(lbl=='2' | lbl=='4' | lbl=='3') %>%
         mutate(y.center=70-match(genome,unique(genome))*10,
-               x1=position,x2=position,y1=y.center-3,y2=y.center+3)
+               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
 
     ## draw labels on the plot for high G-score mutations.
     genes.to.label <- filter(top.G.score.genes,Gene.name %in% top.hits$gene.annotation)
 
-    panel.labels <- select(LTEE.top.hits,lineage,genome,position,gene.annotation,y.center) %>%
+    panel.labels <- select(LTEE.top.hits,lineage,genome,rotated.position,gene.annotation,y.center) %>%
         group_by(lineage) %>% mutate(ypos=mean(y.center))
 
-
+    Fig1.xlab <- expression(paste("Distance from ",italic("oriC")))
+    ## all donor mutations should be labeled as yellow.
     panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
         geom_segment(size=0.05) +
-        scale_colour_manual(values=c('yellow', 'red', 'black','green')) +
+        scale_colour_manual(values=c('yellow', 'red', 'black','green','blue','tan1','tan2','tan3','tan4')) +
         theme_classic() +
-        xlab("Position") +
+        xlab(Fig1.xlab) +
         ylab("Clone") + ylim(5,70) + guides(colour=FALSE) +
         scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$genome)))+
-        geom_point(data=LTEE.top.hits,aes(x=position,y=y.center,color=lbl,shape=mut.annotation)) + guides(shape=FALSE) +
+        geom_point(data=LTEE.top.hits,aes(x=rotated.position,y=y.center,color=lbl,shape=mut.annotation)) + guides(shape=FALSE) +
         #geom_segment(data=genes.to.label, aes(x=Start.position,xend=Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
-        geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=Start.position,xend=Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
+        geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
         ## label genes that are in the text at the top.
-    geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=Start.position, y=67),size=3,angle=45,inherit.aes=FALSE)
+        geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE)
 
     return(panel)
 }
@@ -178,12 +343,9 @@ genes.to.label <- filter(top.G.score.genes,Gene.name %in% LTEE.top.hits$gene.ann
 
 ##annotate auxotrophs and Hfr oriTs on the plot.
 auxotrophs <- filter(hand.annotation,annotation!="Hfr"&annotation!="oriC")
-hfrs.and.origin <- filter(hand.annotation,annotation=="Hfr")
+hfrs <- filter(hand.annotation,annotation=="Hfr")
 
-## label genomes as odd or even.
-genome.names <- levels(labeled.mutations$genome)
-is.odd <- sapply(genome.names, function(x) ifelse(strtoi(substr(x,nchar(x),nchar(x)))%%2, TRUE,FALSE))
-labeled.mutations <- mutate(labeled.mutations,odd=is.odd[genome])
+## examine odd or even clones.
 odd.genomes <- filter(labeled.mutations, odd==TRUE)
 even.genomes <- filter(labeled.mutations, odd==FALSE)
 
@@ -199,7 +361,8 @@ labels.to.int <- sapply(label.levels, function(x) strtoi(x))
 scored.odd.genomes <- filter(odd.genomes,lineage != "Ara-3") %>%
     filter(lbl=='1' | lbl=='0') %>%
     group_by(position) %>%
-    summarize(introgression.score = sum(labels.to.int[lbl]))
+    summarize(introgression.score = sum(labels.to.int[lbl])) %>%
+    mutate(rotated.position=rotate.chr(position))
 
 ## which genes get introgressed the most? is this a sign of positive selection?
 gene.test <- filter(odd.genomes,lineage != "Ara-3") %>%
@@ -261,12 +424,14 @@ special.G.score <- filter(G.score.rest.new.odd.mutations, lineage == 'Ara+1'|lin
 
 
 #######################################
-Fig2 <- ggplot(scored.odd.genomes, aes(x=position,y=introgression.score)) + geom_line(size=0.05) + theme_classic() + xlab("Position") + ylab("Introgression Score") +
+Fig2.xlab <- expression(paste("Distance from ",italic("oriC")))
+Fig2 <- ggplot(scored.odd.genomes, aes(x=rotated.position,y=introgression.score)) + geom_line(size=0.05) + theme_classic() +
+    xlab(Fig2.xlab) + ylab("Introgression Score") +
     ## add auxotroph lines
-    geom_vline(data=auxotrophs,aes(xintercept=position),size=0.05,linetype="dashed") +
-    geom_text_repel(data=auxotrophs,aes(x=position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
+    geom_vline(data=auxotrophs,aes(xintercept=rotated.position),size=0.05,linetype="dashed") +
+    geom_text_repel(data=auxotrophs,aes(x=rotated.position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
     ## add annotation of Hfr and oriC on chromosome.
-   geom_text_repel(data=hfrs.and.origin,aes(x=position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
+   geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
 
 ggsave("/Users/Rohandinho/Desktop/Fig2.pdf",Fig2)
 
@@ -430,7 +595,7 @@ donor.and.deleted.markers <- full_join(all.chunk.summary,deleted.marker.summary)
 ## write table to file for Rich to look at.
 write.csv(donor.and.deleted.markers,"/Users/Rohandinho/Desktop/K-12\ figures/percent-greens-in-donor.csv")
 
-###################################
+#########################################################################################################
 ## I put Ara-3 'recipient' chunks into donor chunk plot to make figure three.
 ## This is what plot.K12.chunks is.
 
@@ -472,7 +637,7 @@ odd.breaks.and.muts <- filter(odd.genome.chunks, chunk.transitions=='2-1' | chun
 odd.breaks.and.muts <- select(odd.genome.chunks,lineage,genome,mut.type,position,mut.annotation,chunk.transitions,lbl)
 
 
-############################
+#######################################################################################################################
 ## Additional figures.
 
 ## Figure S1. Density of differences between K-12 and REL606.
@@ -491,7 +656,6 @@ FigS2 <- ggplot(G.score.data, aes(x=Start.position,y=G.score)) + geom_point(size
 
 ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1)
 ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2)
-
 
 ###################### BRIEF 'MERODIPLOID' ANALYSIS
 
@@ -526,3 +690,27 @@ FigS5 <- ggplot(polys.donors, aes(x=frequency)) + geom_histogram() + facet_grid(
 
 ggsave("/Users/Rohandinho/Desktop/FigS5.pdf",FigS5,width=11,height=8)
 
+## do merodiploid analysis on K-12 polymorphism recipients to check
+## multiple test comparison guess for cause of false positives.
+K12.poly.donor.mutations <- tbl_df(read.csv("../results/K12_poly_donor_mutations.csv"))
+K12.polys.donors <- filter(K12.poly.donor.mutations,frequency<0.9 & frequency>0.1)
+FigS5.2 <- ggplot(K12.polys.donors, aes(x=frequency)) + geom_histogram() + facet_grid(genome ~ .) + theme_classic() + xlab("frequency of possible merodiploid mutations") + ylab("Count") + xlim(0,1) + scale_y_log10()
+ggsave("/Users/Rohandinho/Desktop/FigS5.2.pdf",FigS5.2,width=11,height=8)
+
+############## Fig. S6: relative frequency of donor specific mutations.
+            ##          don't double count mutations found in both odd and even clones.
+donor.mutations <- filter(labeled.mutations,lbl == 6 | lbl==7 | lbl == 8 | lbl == 9) %>%
+    select(-genome,-odd,-frequency) %>%
+    arrange(lineage,position) %>%
+    distinct(lineage, position, .keep_all = TRUE)
+
+donor.mutations.summary <- donor.mutations %>% group_by(lineage,lbl) %>% summarise(count=n())
+FigS6 <- ggplot(donor.mutations, aes(x=lineage,fill=lbl)) + geom_bar() + theme_classic() + ylab("Count of donor-specific markers") + xlab("Lineage") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298'))
+ggsave("/Users/Rohandinho/Desktop/FigS6.pdf",FigS6,width=11,height=8)
+
+############# Fig. S7: location of donor specific mutations on the chromosome.
+only.donor.mutations <- donor.mutations %>%
+    mutate(y.center=35-match(lbl,sort(unique(lbl)))*10,y1=y.center-3,y2=y.center+3)
+FigS7 <- ggplot(only.donor.mutations,aes(x=position,xend=position,y=y1,yend=y2,colour=lbl)) +
+    geom_segment(size=0.05) + theme_classic() + scale_colour_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298'))
+ggsave("/Users/Rohandinho/Desktop/FigS7.pdf",FigS7,width=11,height=8)

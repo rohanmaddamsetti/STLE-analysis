@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 
 ## Tn10-auxotroph-search.py by Rohan Maddamsetti
