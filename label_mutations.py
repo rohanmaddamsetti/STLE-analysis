@@ -106,14 +106,15 @@ def parse_annotated_gd(gdfile):
         mut_annotation = ''
         gene_annotation = get_annotation_from_field(data, "gene_name")
         if mut_type == "SNP":
-            if "snp_type=synonymous" in line:
+            snp_type = get_annotation_from_field(data,"snp_type")
+            if snp_type == 'synonymous':
                 mut_annotation = "dS"
             ## treat nonsense mutations as nonsynonymous mutations.
-            elif "snp_type=nonsynonymous" or "snp_type=nonsense" in line:
+            elif snp_type == 'nonsynonymous' or snp_type== 'nonsense':
                 mut_annotation = "dN"
-            elif "snp_type=intergenic" in line:
+            elif snp_type == 'intergenic':
                 mut_annotation = "non-coding"
-            elif "snp_type=pseudogene" in line:
+            elif snp_type == 'pseudogene':
                 mut_annotation = "non-coding"
         elif mut_type == "DEL":
             ## mutation field already contains the length of the mutation.
@@ -183,7 +184,7 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
 
         if i < last_deletion_end: ## this marker is within a deleted region in the recombinant.
             label = '5'
-            
+
         if label == '0':
             ## NOTE: an odd feature is that some K-12 markers have the same position
             ## since K-12 annotation comes from 4 donor strains, so different markers
@@ -212,7 +213,7 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
     if last_deletion_end > REL606_GENOME_LENGTH:
         print('ERROR: DELETION SPANS BEGINNING AND END OF GENOME FILE!')
         quit()
-            
+
     for l in line_buffer:
         print(','.join(l))
 

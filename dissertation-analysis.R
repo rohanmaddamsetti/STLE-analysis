@@ -164,7 +164,8 @@ pop.problem.erased.muts <- filter(pop.erased.muts,position %in%problems.erased$p
 
 
 ####################################################################################################
-## Erased mutations. Write to file and take a look.
+## Erased mutations.
+## First, write to file and take a look for error checking.
 clone.erased.dN <- filter(labeled.mutations,lbl==4,mut.annotation=='dN') %>% select(-genome,-frequency)
 write.csv(clone.erased.dN,"/Users/Rohandinho/Desktop/clone_erased_dN.csv")
 
@@ -177,8 +178,9 @@ write.csv(clone.erased.dN,"/Users/Rohandinho/Desktop/clone_erased_dN.csv")
 #### Print out a csv of genes for align_erased_mutations.py to align,
 #### and annotate as 0) reversion to pre-LTEE state, 1) K-12 state, 3) new allele.
 
-#### Only look at mutations in odd clones.
-erased.gene.list <- filter(labeled.mutations,lbl==4) %>% select(gene.annotation,lineage)
+#### Only look at dN mutations in odd clones.
+erased.gene.list <- filter(labeled.mutations,lbl==4,mut.annotation=='dN',odd==TRUE) %>% select(gene.annotation,lineage) %>% group_by(lineage) %>% distinct(gene.annotation)
+write.csv(erased.gene.list,"../results/align_these.csv",row.names=FALSE,quote=FALSE)
 
 ###############################################
 ## make Figure 1.
