@@ -155,11 +155,9 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
     relevant_coords = sorted(donor_coords|recipient_dict.keys()|recombinant_dict.keys())
     line_buffer = [] ## this slows down the code, but is useful in debugging.
     last_deletion_end = -1
-
     for i in relevant_coords:
         label = ''
         if i in recombinant_dict:
-            ## first, check to see if this mutation is a deletion.
             if 'DEL' in recombinant_dict[i]:
                 del_data = recombinant_dict[i].split(',')
                 last_deletion_end = int(del_data[3]) + i
@@ -174,7 +172,7 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
             elif i in REL298_dict and muts_equal(recombinant_dict[i], REL298_dict[i]):
                 label = '9' ## REL298 specific marker
             elif i in recipient_dict and muts_equal(recombinant_dict[i], recipient_dict[i]):
-                label = '2' ## LTEE marker in recombinant
+                label = '2' ## LTEE recipient marker in recombinant
             else:
                 label = '3' ## new mutation in recombinant
         elif i in all_donor_dict or i in REL288_dict or i in REL291_dict or i in REL296_dict or i in REL298_dict:
@@ -538,7 +536,7 @@ def main():
     elif args.analysis_stage == 4:
         run_parallyze_on_new_mutations(proj_dir,REL606_gd_dir)
     elif args.analysis_stage == 5:
-        make_REL606_ref_labeled_muts_csv(join(proj_dir,REL606_poly_gd_dir))
+        make_ref_labeled_muts_csv(join(proj_dir,REL606_poly_gd_dir))
     elif args.analysis_stage == 6:
         make_LTEE_marker_csv(join(proj_dir,REL606_poly_gd_dir))
     elif args.analysis_stage == 7:

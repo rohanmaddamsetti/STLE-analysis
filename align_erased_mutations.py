@@ -75,7 +75,7 @@ def get_REL606_seqs(proj_dir, p, p_genes,include_upstream):
         p is the name of the population (e.g. 'Ara+3').
     '''
     REL606_seqs = {}
-    REL606_genome = next(SeqIO.parse(open(join(proj_dir,"references/REL606.6.gbk")),"genbank"))
+    REL606_genome = next(SeqIO.parse(open(join(proj_dir,"references/REL606.7.gbk")),"genbank"))
     for feat in REL606_genome.features:
         if feat.type == 'CDS' and 'gene' in feat.qualifiers:
             this_gene = feat.qualifiers['gene'][0]
@@ -89,8 +89,8 @@ def get_REL606_seqs(proj_dir, p, p_genes,include_upstream):
 
 def setup_blastdbs():
     '''
-    this only blasts the odd recombinants.
-    some lines in the Ara-3 recombinant cause problems, comment out those lines for now.
+    this only blasts the odd REL-numbered recombinants.
+    some lines in the Ara-3 recombinant gd files cause problems, comment out those lines for now.
     '''
 
     projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
@@ -104,7 +104,10 @@ def setup_blastdbs():
                       'Ara-1':'REL2543', 'Ara-2':'REL2544', 'Ara-3':'REL2545',
                       'Ara-4':'REL2546', 'Ara-5':'REL2547', 'Ara-6':'REL2548'}
 
-    odd_recombinant_dict = {p:'RM3-130-'+str(i) for p,i in zip(pops,range(1,24,2))}
+    ## to convert my IDs to REL ID for the recombinant clones.
+    ## REMEMBER: we want ODD REL clones (which have EVEN RM numbers),
+    ## so choose the EVEN RM clones.
+    odd_recombinant_dict = {p:'RM3-130-'+str(i) for p,i in zip(pops,range(2,24+1,2))}
 
     for p in pops:
         cur_dir = join(basedir,p)
@@ -116,7 +119,7 @@ def setup_blastdbs():
             makedirs(join(cur_dir,'blast_results'))
         chdir(join(cur_dir,'blast_dbs'))
         ## first, run gdtools ANNOTATE to make recipient.fasta and recombinant.fasta.
-        refgenome = join(projdir,'references/REL606.6.gbk')
+        refgenome = join(projdir,'references/REL606.7.gbk')
         cur_gdpath = join(projdir,'annotated-diffs/REL606-ref-runs/',p)
         cur_recipient = join(cur_gdpath,'annotated_' + recipient_dict[p] +'.gd')
         cur_recombinant = join(cur_gdpath,'annotated_' + odd_recombinant_dict[p] + '.gd')
@@ -137,6 +140,9 @@ def setup_blastdbs():
 
 
 def make_alignments(upstream_bool=False,make_protein_aln=False):
+    '''
+    Make both protein and DNA alignments in order to compare both.
+'''
 
     ## Never translate upstream regions!
     assert not (make_protein_aln and upstream_bool)
@@ -144,6 +150,13 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
     proj_dir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
     align_f = open(join(proj_dir,"results/align_these.csv"))
     fasta_base = join(proj_dir,"results/erased-alignments/")
+
+    if make_protein_aln:
+        mafft_indir = join(fasta_base,'protein-mafft-input')
+        mafft_outdir = join(fasta_base,'protein-mafft-output')
+    else:
+        mafft_indir = join(fasta_base,'dna-mafft-input')
+        mafft_outdir = join(fasta_base,'dna-mafft-output')
 
     pops = ['Ara+1','Ara+2','Ara+3','Ara+4','Ara+5','Ara+6',
             'Ara-1','Ara-2','Ara-3','Ara-4','Ara-5','Ara-6']
@@ -218,13 +231,13 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
 
     ## make MSAs with mafft using the sequences stored in alignment_dict.
     ## write the alignments to file for mafft to use, run mafft, and store the MSAs.
-    if not exists(join(fasta_base,'mafft-input')):
-        makedirs(join(fasta_base,'mafft-input'))
-    if not exists(join(fasta_base,'mafft-output')):
-        makedirs(join(fasta_base,'mafft-output'))
+    if not exists(mafft_indir):
+        makedirs(mafft_indir)
+    if not exists(mafft_outdir):
+        makedirs(mafft_outdir)
     msa_dict = {}
     for k,v in alignment_dict.items():
-        this_alignment_in = join(fasta_base, 'mafft-input', k+'.fasta')
+        this_alignment_in = join(mafft_indir, k+'.fasta')
         if make_protein_aln:
             these_align_seqs = [SeqRecord(Seq(dna).translate(),id=nm,description='') for nm,dna in v.items()]
         else:
@@ -233,7 +246,7 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
         ## run mafft.
         run_mafft = MAFFT(input=this_alignment_in)
         stdout, stderr = run_mafft()
-        this_aln_out = join(fasta_base, 'mafft-output', k+'.fasta')
+        this_aln_out = join(mafft_outdir, k+'.fasta')
         ## parse and save mafft output in a data structure.
         msa_dict[k] = AlignIO.read(StringIO(stdout), "fasta")
         with open(this_aln_out, 'w') as handle:
@@ -243,14 +256,17 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
     ##in REL606 that is preserved in the recipient, but not in K12 or the recombinant clone.
     return msa_dict
 
-def make_msa_dict():
+def make_msa_dict(protein_aln=False):
     '''
     input: a directory containing aligned sequences.
     output: a dictionary containing the MSA.
 '''
     msa_dict = {}
     proj_dir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-    mafft_out = join(proj_dir,"results/erased-alignments/mafft-output")
+    if protein_aln:
+        mafft_out = join(proj_dir,"results/erased-alignments/protein-mafft-output")
+    else:
+        mafft_out = join(proj_dir,"results/erased-alignments/dna-mafft-output")
     for f in [x for x in listdir(mafft_out) if x.endswith('fasta')]:
         k = basename(f).split('.')[0]
         full_f = join(mafft_out,f)
@@ -299,14 +315,16 @@ def count_aln_type(msa_dict):
     annotate alignments as 0) REL606 state, 1) recipient state, 2) K-12 state 3) New state.
     (in protein world, not DNA world).
 
+    if the sequence in REL606 and K-12 is identical, mark as REL606 state (ancestral state).
+
     make a nice figure with seaborn.
 '''
-    aln_type_count = {'REL606':0,'Recipient':0,'K-12':0,'New':0}
+    aln_type_count = {'REL606':0,'Recipient':0,'K-12':0,'New':0,'REL606/K-12':0}
 
     ## make a dict of dicts to turn into a pandas dataframe.
 
    ## define an sort order for sequences in the alignment.
-    aln_order = {'REL606':0, 'recipient':1,'recombinant':2,'K12':3}
+    aln_order = {'REL606':0, 'recipient':1,'recombinant':2,'K12':3, 'REL606/K-12':4}
 
     ## lists for DataFrame columns.
     lineage_col = []
@@ -319,20 +337,30 @@ def count_aln_type(msa_dict):
         gene_col.append(gen)
 
         v.sort(key=lambda record: aln_order[record.id])
-        if v[2].seq == v[0].seq:
+        if v[2].seq == v[0].seq == v[3].seq:
+            aln_type_count['REL606/K-12'] += 1
+            print(' '.join([k,'REL606/K-12']))
+            #print(' '.join([k,'4']))
+            ## note: mark as REL606 allele in this case.
+            allele_type_col.append('REL606 allele')
+        elif v[2].seq == v[0].seq:
             aln_type_count['REL606'] += 1
+            print(' '.join([k,'REL606']))
             #print(' '.join([k,'0']))
             allele_type_col.append('REL606 allele')
         elif v[2].seq == v[1].seq:
             aln_type_count['Recipient'] += 1
+            print(' '.join([k,'Recipient']))
             #print(' '.join([k,'2']))
             allele_type_col.append('Recipient allele')
         elif v[2].seq == v[3].seq:
             aln_type_count['K-12'] += 1
+            print(' '.join([k,'K-12']))
             #print(' '.join([k,'1']))
             allele_type_col.append('K-12 allele')
         elif v[2].seq != v[0].seq and v[2].seq != v[1].seq and v[2].seq != v[3].seq:
             aln_type_count['New'] += 1
+            print(' '.join([k,'New']))
             #print(' '.join([k,'2']))
             allele_type_col.append('New allele')
         else:
@@ -356,12 +384,21 @@ def main():
     fasta_base = join(proj_dir,"results/erased-alignments/")
 
     setup_blastdbs()
-    mafft_outdir = join(fasta_base,'mafft-output')
-    if exists(mafft_outdir) and listdir(mafft_outdir):
-        prot_dict = make_msa_dict()
+
+    prot_mafft_outdir = join(fasta_base,'protein-mafft-output')
+    if exists(prot_mafft_outdir) and listdir(prot_mafft_outdir):
+        prot_dict = make_msa_dict(protein_aln=True)
     else:
         prot_dict = make_alignments(upstream_bool=False,make_protein_aln=True)
-    print_alns(prot_dict,2)
+    print_alns(prot_dict,1)
     count_aln_type(prot_dict)
+
+    dna_mafft_outdir = join(fasta_base,'dna-mafft-output')
+    if exists(dna_mafft_outdir) and listdir(dna_mafft_outdir):
+        dna_dict = make_msa_dict(protein_aln=False)
+    else:
+        dna_dict = make_alignments(upstream_bool=False,make_protein_aln=False)
+    ##print_alns(dna_dict,2)
+    ##count_aln_type(dna_dict)
 
 main()
