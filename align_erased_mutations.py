@@ -390,6 +390,7 @@ def main():
         prot_dict = make_msa_dict(protein_aln=True)
     else:
         prot_dict = make_alignments(upstream_bool=False,make_protein_aln=True)
+
     print_alns(prot_dict,1)
     count_aln_type(prot_dict)
 
@@ -398,7 +399,10 @@ def main():
         dna_dict = make_msa_dict(protein_aln=False)
     else:
         dna_dict = make_alignments(upstream_bool=False,make_protein_aln=False)
+
+    ## This is commented out because we're interested in the prot_dict.
     ##print_alns(dna_dict,2)
     ##count_aln_type(dna_dict)
+
 
 main()

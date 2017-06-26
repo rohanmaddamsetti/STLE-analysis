@@ -91,7 +91,8 @@ def blast_auxotrophy_genes_against_donors():
         this_blast()
 
 def main():
-    make_blast_dbs_from_de_novo_assemblies()
+    ## I deleted the de novo assemblies. Reassemble before running the next line.
+    ##make_blast_dbs_from_de_novo_assemblies()
     blast_Tn10_against_de_novo_assemblies()
     blast_auxotrophy_genes_against_donors()
 

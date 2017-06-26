@@ -2,6 +2,8 @@
 
 ## label_mutations.py by Rohan Maddamsetti.
 
+## TODO: get rid of unnecessary code.
+
 ## This script generates a csv file from annotated genome diff files.
 ## It labels mutations in recombinant genomes from the end of the Souza-Turner
 ## experiment as being
@@ -11,32 +13,18 @@
 ## 3) new mutations (black)
 ## 4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
 ## 5) deleted markers (marker falls in a deleted region).
-
-## With the K-12 reference, I added labels for donor specific markers.
-## NOTE: this code needs work. it doesn't take the ancestor, so it doesn't score
-## recipient mutations.
-
 ## 6) REL288 specific marker
 ## 7) REL291 specific marker
 ## 8) REL296 specific marker
 ## 9) REL298 specific marker
 
-## Usage1: python label_mutations.py REL606 1 > ../results/labeled_mutations.csv OR
-##                  label_mutations.py K12 1 > ../results/K12_ref_labeled_mutations.csv
+## Usage1: python label_mutations.py REL606 1 > ../results/labeled_mutations.csv
 
 ## Usage2: python label_mutations.py REL606 2 > ../results/K-12-differences.csv
-##         python label_mutations.py K12 2 > ../results/K12_ref_K-12-differences.csv
 
 ## Usage3: python label_mutations.py REL606 3 > ../results/LTEE-recipient-markers.csv
-##     python label_mutations.py K12 3 > ../results/K12_LTEE-recipient-markers.csv
 
 
-## the K12 flag does 1,2,3 with K-12 reference and REL606 flag uses the REL606 reference.
-
-## Usage4: python label_mutations.py 4
-
-## usage 4 is a wrapper for gdtools and parallyze to look for parallel
-## positive selection on new mutations in the Souza-Turner experiment.
 
 ## Usage5: python label_mutations.py REL606 5 > ../results/poly_labeled_mutations.csv
 
@@ -44,7 +32,6 @@
 ##         python label_mutations.py K12 6 > ../results/K12_poly_LTEE-recipient-markers.csv
 
 ## Usage7: python label_mutations.py REL606 7 > ../results/poly_donor-markers.csv
-##         python label_mutations.py K12 7 > ../results/K12_poly_donor-markers.csv
 
 ## Usage8: python label_mutations.py REL606 8 > ../results/evolution-experiment/evoexp_labeled_mutations.csv
 
@@ -215,51 +202,6 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
     for l in line_buffer:
         print(','.join(l))
 
-def K12_ref_label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_name,lineage):
-    REL288_dict = donor_dictz['REL288']
-    REL291_dict = donor_dictz['REL291']
-    REL296_dict = donor_dictz['REL296']
-    REL298_dict = donor_dictz['REL298']
-    donor_keys = {k for k in set.union(*[set(donor_dictz[x].keys()) for x in donor_dictz])}
-
-    line_buffer = []
-    relevant_coords = sorted(donor_keys|recipient_dict.keys()|recombinant_dict.keys())
-    for i in relevant_coords:
-        label = ''
-        if i in recombinant_dict:
-            if i in REL288_dict and recombinant_dict[i][0] in REL288_dict[i]:
-                label = '6'
-            elif i in REL291_dict and recombinant_dict[i][0] in REL291_dict[i]:
-                label = '7'
-            elif i in REL296_dict and recombinant_dict[i][0] in REL296_dict[i]:
-                label = '8'
-            elif i in REL298_dict and recombinant_dict[i][0] in REL298_dict[i]:
-                label = '9'
-            elif i in recipient_dict and recombinant_dict[i][0] in recipient_dict[i]:
-                label = '1' ## EITHER REL606 marker or LTEE marker in recombinant.
-                ## TODO: distinguish between LTEE marker and E. coli B markers.
-            else:
-                label = '3' ## new mutation in recombinant
-            line_buffer.append([lineage,recombinant_name,recombinant_dict[i][0],label])
-        elif i in donor_keys:
-            label = '1' ## this K-12 marker did not make it, site in REL606 state.
-            if i in REL288_dict:
-                line_buffer.append([lineage,recombinant_name,REL288_dict[i][0],label])
-            elif i in REL291_dict:
-                line_buffer.append([lineage,recombinant_name,REL291_dict[i][0],label])
-            elif i in REL296_dict:
-                line_buffer.append([lineage,recombinant_name,REL296_dict[i][0],label])
-            elif i in REL298_dict:
-                line_buffer.append([lineage,recombinant_name,REL298_dict[i][0],label])
-        elif i in recipient_dict:
-            label = '0' ## this LTEE marker did not make it, erased by K-12?
-            line_buffer.append([lineage,recombinant_name,recipient_dict[i][0],label])
-            ## TODO: distinguish between LTEE marker and E. coli B markers.
-
-    for l in line_buffer:
-        print(','.join(l))
-
-
 def make_ref_labeled_muts_csv(data_dir,evoexp=False):
     ''' data_dir contains folders called Ara+1,...,Ara+6,...,Ara-1,...,Ara-6.
     each of those folders contains an annotated diff of the recipient strains
@@ -297,7 +239,6 @@ def make_ref_labeled_muts_csv(data_dir,evoexp=False):
     REL296_dict = {k:v for k,v in REL296_dict.items() if not 'TRN10TETR' in v}
     REL298_dict = {k:v for k,v in REL298_dict.items() if not 'TRN10TETR' in v}
     donor_dict = {k:v for k,v in donor_dict.items() if not 'TRN10TETR' in v}
-
 
 
     donor_dictz = {'REL288':REL288_dict, 'REL291':REL291_dict,'REL296':REL296_dict,'REL298':REL298_dict,'donor_intersection':donor_dict}
@@ -417,72 +358,6 @@ def make_donor_csv(data_dir):
         for i in sorted(donor_dict.keys()):
             print(donor_name+','+donor_dict[i])
 
-def run_parallyze_on_new_mutations(proj_dir,gd_dir):
-    '''this function is a wrapper for gdtools and parallyze--it uses
-    gdtools SUBTRACT to filter only new mutations in the recombinant
-    genome diffs, writes the filtered diffs to results/new-mutation-diffs/,
-    writes an input file for parallyze, and then runs parallyze.
-    The point of this analysis is to ask whether there is evidence of parallel
-    evolution among new mutations in the recombinant clones.'''
-
-    data_dir = join(proj_dir,gd_dir)
-    output_path = join(proj_dir, 'results/new_mutation_diffs/REL606-ref')
-    if not exists(output_path):
-        makedirs(output_path)
-
-    ####### NOTE: even recombinants are commented out, because odds OR evens
-    ###### are independent genomes. this wouldn't matter if the parallyze option
-    ###### that allows related genomes within a lineage to be included worked.
-    ###### I could see what Jeff and Olivier do in the 264 genome project
-    ###### to get this option working.
-    donor_gd = join(proj_dir,gd_dir,'annotated_K-12.gd')
-    lineages = ['Ara+1', 'Ara+2', 'Ara+3', 'Ara+4', 'Ara+5', 'Ara+6',
-                'Ara-1', 'Ara-2', 'Ara-3', 'Ara-4', 'Ara-5', 'Ara-6']
-    for l in lineages:
-        lineage_dir = join(data_dir,l)
-        lineage_diffs = [x for x in listdir(lineage_dir) if x.endswith('.gd')]
-        for x in lineage_diffs:
-            if 'REL25' in x :
-                recipient_gd = join(lineage_dir,x)
-            elif int(x[-4]) % 2:
-                odd_recombinant_gd = join(lineage_dir,x)
-            else:
-                even_recombinant_gd = join(lineage_dir,x)
-        odd_name = get_genome_name(odd_recombinant_gd)
-        ##even_name = get_genome_name(even_recombinant_gd)
-        odd_new_mut_output = join(output_path,odd_name+'_new_muts.gd')
-        ##even_new_mut_output = join(output_path,even_name+'_new_muts.gd')
-        if not exists(odd_new_mut_output):
-            call(["gdtools", "SUBTRACT", odd_recombinant_gd, donor_gd, recipient_gd, "-o", odd_new_mut_output])
-        ##if not exists(even_new_mut_output):
-        ##    call(["gdtools", "SUBTRACT", even_recombinant_gd, donor_gd, recipient_gd, "-o", even_new_mut_output])
-
-    ## do a sanity check to make sure that the number of new mutations in the gd files
-    ## matches the number of new mutations labeled in /results/labeled_mutations.csv.
-    ##new_mutation_sanity_check(proj_dir,lineages, output_path)
-
-    ## now, generate an configuration file for parallyze.
-    conf_path = join(output_path,"parallyze.conf")
-    with open(conf_path,'w') as pf:
-        print("# parallyze.conf for new mutation analysis",file=pf)
-        print("# of odd recombinant genomes in Souza-Turner experiment",file=pf)
-        print("REF_GENOME ",join(proj_dir, "references/REL606.6.gbk"),file=pf)
-        print("GENOMEDIFF_FILES",file=pf)
-        for f in listdir(output_path):
-            if f.endswith(".gd"):
-                print(join(output_path,f),file=pf)
-        print("NONSYNONYMOUS True",file=pf)
-        print("SYNONYMOUS False",file=pf)
-        print("NONCODING False",file=pf)
-        print("PSEUDOGENE False",file=pf)
-        print("INTERGENIC False",file=pf)
-        print("GENE_PRODUCT False",file=pf)
-        print("REPLICATES 1000",file=pf)
-        print("GENES_TO_DISPLAY 10",file=pf)
-    pf.close()
-    parallyze_path = "/Users/Rohandinho/Desktop/Projects/parallyze/parallyze.py"
-    call([parallyze_path, "--config", conf_path, "--procedure", "mutationTally"])
-
 def new_mutation_sanity_check(proj_dir,lineages,output_path,count_only_odd=True):
     for f in listdir(output_path):
         call(["wc", join(output_path,f)])
@@ -533,8 +408,6 @@ def main():
             make_LTEE_marker_csv(join(proj_dir,REL606_gd_dir))
         elif args.ref_genome == 'K12':
             make_LTEE_marker_csv(join(proj_dir,K12_gd_dir))
-    elif args.analysis_stage == 4:
-        run_parallyze_on_new_mutations(proj_dir,REL606_gd_dir)
     elif args.analysis_stage == 5:
         make_ref_labeled_muts_csv(join(proj_dir,REL606_poly_gd_dir))
     elif args.analysis_stage == 6:
