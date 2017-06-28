@@ -32,7 +32,7 @@ def make_STLE_clone_coverage_df():
 
     projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
     stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
-    lineage_dict = {'REL288':'REL288', 'REL291':'REL291','REL296':'REL296','REL298':'REL298',
+    lineage_dict = {'REL288':'Donor', 'REL291':'Donor','REL296':'Donor','REL298':'Donor',
                     'REL2537':'Ara+1', 'REL2538':'Ara+2',
                     'REL2539':'Ara+3', 'REL2540':'Ara+4',
                     'REL2541':'Ara+5', 'REL2542':'Ara+6',
@@ -189,7 +189,10 @@ def make_violin_plot(df,evolexp=False):
         plt.savefig("/Users/Rohandinho/Desktop/evolexp_test.pdf", format='PDF')
     else:
         ax = sns.violinplot(x="Lineage", y="Unique Coverage", data=df)
-        plt.savefig("/Users/Rohandinho/Desktop/test.pdf", format='PDF')
+        if not evolexp:
+            plt.savefig("/Users/Rohandinho/Desktop/Fig6.pdf", format='PDF')
+        else:
+            plt.savefig("/Users/Rohandinho/Desktop/test.pdf", format='PDF')
 
 def make_coverage_small_multiple(df,evolexp=False):
     '''
@@ -204,7 +207,7 @@ def make_coverage_small_multiple(df,evolexp=False):
         ## TODO: fix the x-axis. try to use scientific notation on x-axis.
         #g.set(xaxis.get_major_formatter().set_powerlimits((0, 1))
         g.set(xticklabels=[])
-        plt.savefig("/Users/Rohandinho/Desktop/test1.pdf", format='PDF')
+        plt.savefig("/Users/Rohandinho/Desktop/FigS5.pdf", format='PDF')
 
     else:
         ## sum coverage by position (summing over clones in the same lineage)
@@ -214,15 +217,12 @@ def make_coverage_small_multiple(df,evolexp=False):
         ## TODO: fix the x-axis. try to use scientific notation on x-axis.
         #g.set(xaxis.get_major_formatter().set_powerlimits((0, 1))
         g.set(xticklabels=[])
-        plt.savefig("/Users/Rohandinho/Desktop/test2.pdf", format='PDF')
+        plt.savefig("/Users/Rohandinho/Desktop/FigS4.pdf", format='PDF')
 
-def evol_exp_coverage_statistical_tests():
+def make_fig10():
     '''
-    Two functions due to different directory structures.
-
     Make a pandas dataframe containing coverage information
-    among the Ara-3 STLE continuation populations,
-    and for the Ara+1 Day 30 STLE continuation population.
+    among the Ara-3 and Ara+1 STLE continuation populations,
 
     To avoid auto-correlation in the coverage sampling, use coverage every 500 bp
     (since short reads at most gives 350 bp of information).
@@ -236,7 +236,7 @@ def evol_exp_coverage_statistical_tests():
     refseq_col = [] ## values are either "CHR" or "F"
     sample_col = []
 
-    lineage_dict = {"RM3-149-9":'Ara-3',"RM3-153-1":'Ara+1',"RM3-153-9":'Ara-3'}
+    lineage_dict = {"RM3-149-1":'Ara+1', "RM3-149-9":'Ara-3', "RM3-153-1":'Ara+1', "RM3-153-9":'Ara-3'}
     samples = lineage_dict.keys()
     chr_coverage_dir = join(projdir,"breseq-assemblies/evolution-experiment/coverage")
     F_coverage_dir = join(projdir,"breseq-assemblies/evolution-experiment/F-plasmid-coverage")
@@ -289,160 +289,28 @@ def evol_exp_coverage_statistical_tests():
         'Position' : position_col
     })
 
-    ## Make a small multiple comparing coverage (ref in different colors)
+    ## Make a box plot comparing T=1000 to T=1200 and CHR to F for Ara+1 and Ara-3 samples.
     sns.set(style="ticks")
     plt.figure()
-    g = sns.FacetGrid(df, row="Sample", col="Reference",sharex=False,sharey=False)
-    g.map_dataframe(plt.plot, "Position", "Unique Coverage")
-    axes = g.axes
-    ## change x axis for the F-plasmid since it's so much smaller than E. coli
-    ##chromosome, and make sure y-axes are on the same scale
-    axes[0,1].set_xlim(0,100000)
-    axes[1,1].set_xlim(0,100000)
-
-    axes[1,1].set_ylim(0,1800)
-
-    axes[1,1].set_xlim(0,100000)
-    axes[2,1].set_xlim(0,100000)
-    plt.savefig("/Users/Rohandinho/Desktop/evolexp-F-plasmid-coverage.pdf", format='PDF')
-
-def coverage_statistical_tests():
-    '''
-    In the populations with evidence of the F-plasmid,
-    does coverage indicate elevated copy-number, i.e. existence
-    as a plasmid rather than being chromosomally integrated?
-
-    Make a pandas dataframe containing coverage information
-    among the Ara-3 clones.
-
-    As a control, do these tests on the donor clones as well.
-
-    Then, do either a Mann-Whitney U test or a 2-sample Kolmogorov-Smirnov test
-    to see whether coverage on the F-plasmid reference is higher than the coverage
-    on the reference genome.
-
-    On the Ara-3 clones, use the K-12 reference genome.
-
-    To avoid auto-correlation in the coverage sampling, use coverage every 500 bp
-    (since short reads at most gives 350 bp of information).
-'''
-
-    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-
-    lineage_col = []
-    unique_cov_col = []
-    position_col = []
-    refseq_col = [] ## values are either "CHR" or "F"
-    sample_col = []
-
-    lineage_dict = {"REL288":'Donor',"REL291":'Donor',"REL296":'Donor',
-                        "REL298":'Donor',"RM3-130-17":"Ara-3",'RM3-130-18':'Ara-3',
-                        'REL4397':'Ara-3','REL4398':'Ara-3'}
-    samples = list(lineage_dict.keys())
-    assembly_dir = join(projdir,"breseq-assemblies")
-    chr_coverage_base = join(assembly_dir,"K-12-ref-runs")
-    for yf in listdir(chr_coverage_base):
-        if not isdir(join(chr_coverage_base,yf)):
-            continue
-        for xf in listdir(join(chr_coverage_base,yf)):
-            for sample in samples:
-                ## make sure we have the right sample.
-                if sample in xf:
-                    this_cov_file = join(chr_coverage_base,yf,xf,"08_mutation_identification/NC_000913.coverage.tab")
-                    this_cov_fh = open(this_cov_file)
-                    for i,line in enumerate(this_cov_fh):
-                        ## skip header, and sample once every 500 positions.
-                        if i == 0 or i % 500 != 1:
-                            continue
-                        line_data = line.split()
-                        unique_coverage = int(line_data[0]) + int(line_data[1])
-                        position = int(line_data[-1])
-                        lineage = lineage_dict[sample]
-                        ## Now add row data into each column list.
-                        sample_col.append(sample)
-                        refseq_col.append("CHR")
-                        lineage_col.append(lineage)
-                        unique_cov_col.append(unique_coverage)
-                        position_col.append(position)
-
-    F_coverage_base = join(assembly_dir,"F-plasmid-ref-runs")
-    for yf in listdir(F_coverage_base):
-        if not isdir(join(F_coverage_base,yf)):
-            continue
-        for xf in listdir(join(F_coverage_base,yf)):
-            for sample in samples:
-                ## make sure we have the right sample.
-                if sample in xf:
-                    this_cov_file = join(F_coverage_base,yf,xf,"08_mutation_identification/NC_002483.coverage.tab")
-                    this_cov_fh = open(this_cov_file)
-                    for i,line in enumerate(this_cov_fh):
-                        ## skip header, and sample once every 500 positions.
-                        if i == 0 or i % 500 != 1:
-                            continue
-                        line_data = line.split()
-                        unique_coverage = int(line_data[0]) + int(line_data[1])
-                        position = int(line_data[-1])
-                        lineage = lineage_dict[sample]
-                        ## Now add row data into each column list.
-                        sample_col.append(sample)
-                        refseq_col.append("F")
-                        lineage_col.append(lineage)
-                        unique_cov_col.append(unique_coverage)
-                        position_col.append(position)
-
-    df = pd.DataFrame({
-        'Sample' : sample_col,
-        'Reference' : refseq_col,
-        'Lineage' : lineage_col,
-        'Unique Coverage' :  unique_cov_col,
-        'Position' : position_col
-    })
-
-    ## Now, take subsets of the data frame by sample_col, and do KS-tests by refseq_col.
-
-    for sample in samples:
-        testdf = df.loc[df['Sample'] == sample]
-        chr_cov_vec = testdf[testdf['Reference']=="CHR"]['Unique Coverage']
-        F_cov_vec = testdf[testdf['Reference']=="F"]['Unique Coverage']
-        this_KS_test = ks_2samp(chr_cov_vec,F_cov_vec)
-        print(sample)
-        print(this_KS_test)
-        this_U_test = mannwhitneyu(chr_cov_vec,F_cov_vec)
-        print(this_U_test)
-
-    ## Make a small multiple comparing coverage (ref in different colors)
-    sns.set(style="ticks")
-    plt.figure()
-    g = sns.FacetGrid(df, row="Sample", col="Reference",sharex=False,sharey=True)
-    g.map_dataframe(plt.plot, "Position", "Unique Coverage")
-    axes = g.axes
-    ## change x axis for the F-plasmid since it's so much smaller than E. coli
-    ##chromosome, and make sure y-axes are on the same scale
-    axes[0,1].set_xlim(0,100000)
-    axes[1,1].set_xlim(0,100000)
-    axes[1,1].set_xlim(0,100000)
-    axes[2,1].set_xlim(0,100000)
-    plt.savefig("/Users/Rohandinho/Desktop/coverage_tests.pdf", format='PDF')
-
-    ## try to make a violin plot as well.
-    plt.figure()
-    v = sns.violinplot(x="Sample", y="Unique Coverage",hue="Reference", data=df)
-    plt.savefig("/Users/Rohandinho/Desktop/violin.pdf", format='PDF')
+    v = sns.boxplot(x="Sample", y="Unique Coverage",hue="Reference", data=df)
+    plt.ylim(-100, 1000)
+    plt.savefig("/Users/Rohandinho/Desktop/Fig10.pdf", format='PDF')
 
     return df
 
 def main():
-    coverage_statistical_tests()
-    ##evol_exp_coverage_statistical_tests()
+
+    ## Make Figure 6 and Figure S4.
     ##df = make_STLE_clone_coverage_df()
     ##make_violin_plot(df)
     ##make_coverage_small_multiple(df)
 
+    ## Make Figure S5.
     ##df2 = make_evolexp_coverage_df()
-    #make_violin_plot(df2,evolexp=True)
     ##make_coverage_small_multiple(df2,evolexp=True)
 
-
+    ## Make Figure 10.
+    make_fig10()
 
     projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
     stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")

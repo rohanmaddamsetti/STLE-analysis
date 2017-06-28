@@ -53,7 +53,8 @@ G.score.data <- tbl_df(read.csv("../results/036806-3.csv")) %>%
     mutate(rotated.Start.position=rotate.chr(Start.position))
 
 ## clone sequencing data.
-labeled.mutations <- tbl_df(read.csv("../results/labeled_mutations.csv")) %>% mutate(lbl=as.factor(lbl)) %>%
+labeled.mutations <- tbl_df(read.csv("../results/labeled_mutations.csv")) %>%
+    mutate(lbl=as.factor(lbl)) %>%
     mutate(rotated.position=rotate.chr(position))
 
 ## label clones as odd or even: BASED ON REL NUMBERING, NOT RM NUMBERING!
@@ -74,7 +75,7 @@ K12.diff.data <- tbl_df(read.csv("../results/K-12-differences.csv")) %>%
 ## Make Figures and Tables.
 
 ######
-## Separate into odd or even clones, and
+## First, separate into odd or even clones, and
 ## This is used in a lot of the following code (Fig S2, Fig 2, Fig 4 or something like that.)
 odd.genomes <- filter(labeled.mutations, odd==TRUE)
 even.genomes <- filter(labeled.mutations, odd==FALSE)
@@ -487,9 +488,6 @@ clone.K12.seg.parallelism <- odd.annotated.clone.K12.segments %>% group_by(gene,
 ## Distance between new mutations and breakpoints (are breakpoints mutagenic?)
 ## recombination hot and cold spots
 
-##global variable used in Fig. 5 code.
-REL606.GENOME.LENGTH <- 4629812
-
 ## This function maps a vector of labels to a vector of transitions between
 ## chunks from K-12 and chunks from LTEE recipient.
 ## '1-2' is a start of a K-12 chunk,
@@ -501,11 +499,6 @@ REL606.GENOME.LENGTH <- 4629812
 
 ## It would be GREAT if I could write this without a for loop,
 ## this is a 15 second speed bottleneck.
-
-
-############################  IMPORTANT BUG TO FIX!!!!
-############################  THIS CODE DOES NOT HANDLE DELETIONS OR INSERTIONS.
-
 
 labels.to.chunks <- function(labelz) {
     chunks <- rep('0',length(labelz))
@@ -559,49 +552,99 @@ label.segments <- function(labelz) {
     return(segment.label)
 }
 
+## index segments in order to group sites in the same segment.
+## segment.labels is the vector of TRUE or FALSE returned by label.segments.
+index.segments <- function(segment.labels) {
+    segment.indexes <- rep(0,length(segment.labels))
+    cur.index = 1
+    segment.indexes[cur.index] = 1
+    for (i in 2:length(segment.labels)) {
+        if (segment.labels[i] != segment.labels[i-1])
+            cur.index <- cur.index + 1
+        segment.indexes[i] <- cur.index
+    }
+    ## check if last segment is actually part of first segment.
+    ## if so, replace the last segment label (cur.index) with 1.
+    if (segment.labels[1] == segment.labels[length(segment.labels)])
+        segment.indexes <- sapply(segment.indexes, function(x) ifelse(x==cur.index,1,x))
+
+    return(segment.indexes)
+}
+
+
+## This function labels transitions, then labels and indexes segments,
+## and then calculates changes to segment length due to indels.
+
+## It is important that the input gets grouped by variable 'group', so that
+## different genomes are processed separately.
+calc.indel.change <- function(genomes.df) {
+    df <- genomes.df %>%
+        group_by(lineage) %>%
+        mutate(chunk.transitions=labels.to.chunks(lbl)) %>%
+        mutate(K12.chunk=label.segments(lbl)) %>%
+        mutate(chunk.index=index.segments(K12.chunk)) %>%
+        group_by(chunk.index)
+
+    ## add up insertions and subtract deletions in each chunk.
+    insertions <- filter(df,mut.type=='INS')
+    deletions <- filter(df,mut.type=='DEL')
+
+    del.sizes <- summarize(deletions, deleted = -sum(as.numeric(mutation)))
+    ins.sizes <- summarize(insertions, inserted = sum(as.numeric(mutation)))
+
+    indels <- full_join(del.sizes,ins.sizes) %>%
+        mutate(deleted=ifelse(is.na(deleted),0,deleted)) %>%
+        mutate(inserted=ifelse(is.na(inserted),0,inserted)) %>%
+        mutate(delta.length=inserted-deleted)
+
+    df <- left_join(df,indels) %>%
+        mutate(deleted=ifelse(is.na(deleted),0,deleted)) %>%
+        mutate(inserted=ifelse(is.na(inserted),0,inserted)) %>%
+        mutate(delta.length=ifelse(is.na(delta.length),0,delta.length)) %>%
+        ungroup() ## remove grouping to avoid problems downstream.
+
+    return(df)
+
+}
+
+## works on both even and odd.genomes.
+calc.chunks <- function(odd.genomes) {
+    REL606.GENOME.LENGTH <- 4629812
+    genome.chunks <- calc.indel.change(odd.genomes) %>%
+        filter(chunk.transitions != '0') %>%
+        ## position - lag(position) gives the distance between the previous transition
+        ## marker. So, there are N-1 chunk lengths for N markers (first entry is NA).
+        group_by(lineage) %>% ## make sure groups are by genome.
+        mutate(chunk.length=position-lag(position)) %>%
+        ## since genomes are circular, we add up the chunks at the beginning and
+        ## end of each genome and assign to the first entry of chunk.length.
+        ##(start of first chunk + genome.length-start of last chunk.
+        mutate(chunk.length=replace(chunk.length,is.na(chunk.length),
+                                    position[1]+REL606.GENOME.LENGTH-position[n()])) %>%
+        ## finally, correct for indels.
+        mutate(corrected.chunk.length=chunk.length+delta.length)
+
+    return(genome.chunks)
+}
+
 #########################################
+
 
 ## The group_by call is important, so that different genomes are processed
 ## separately.
-odd.genome.chunks <- group_by(odd.genomes, lineage) %>%
-    mutate(chunk.transitions=labels.to.chunks(lbl)) %>%
-    filter(chunk.transitions =='1-2'|chunk.transitions=='2-1') %>%
-## position - lag(position) gives the distance between the previous transition
-## marker. So, there are N-1 chunk lengths for N markers (first entry is NA).
-    mutate(chunk.length=position-lag(position)) %>%
-## since genomes are circular, we add up the chunks at the beginning and
-## end of each genome and assign to the first entry of chunk.length.
-##(start of first chunk + genome.length-start of last chunk.
-    mutate(chunk.length=replace(chunk.length,is.na(chunk.length),
-                                position[1]+REL606.GENOME.LENGTH-position[n()]))
+odd.genome.chunks <- calc.chunks(odd.genomes)
+even.genome.chunks <- calc.chunks(even.genomes)
 
 ## If a chunk.transition is '1-2', the corresponding chunk length is LTEE (1).
 ## If a chunk.transition is '2-1', the corresponding chunk length is K-12 (2).
 ## This is because of the position-lag(position) code.
 
-odd.K12.chunks <- filter(odd.genome.chunks,chunk.transitions=='2-1')
-odd.LTEE.chunks <- filter(odd.genome.chunks,chunk.transitions=='1-2')
+odd.K12.chunks <- filter(odd.genome.chunks,chunk.transitions=='2-1') %>% mutate(segment.type='K-12')
+odd.LTEE.chunks <- filter(odd.genome.chunks,chunk.transitions=='1-2') %>% mutate(segment.type='REL606')
 
 ### Do evens.
-
-even.genome.chunks <- group_by(even.genomes, lineage) %>%
-    mutate(chunk.transitions=labels.to.chunks(lbl)) %>%
-    filter(chunk.transitions =='1-2'|chunk.transitions=='2-1') %>%
-## position - lag(position) gives the distance between the previous transition
-## marker. So, there are N-1 chunk lengths for N markers (first entry is NA).
-    mutate(chunk.length=position-lag(position)) %>%
-## since genomes are circular, we add up the chunks at the beginning and
-## end of each genome and assign to the first entry of chunk.length.
-##(start of first chunk + genome.length-start of last chunk.
-    mutate(chunk.length=replace(chunk.length,is.na(chunk.length),
-                                position[1]+REL606.GENOME.LENGTH-position[n()]))
-
-## If a chunk.transition is '1-2', the corresponding chunk length is LTEE (1).
-## If a chunk.transition is '2-1', the corresponding chunk length is K-12 (2).
-## This is because of the position-lag(position) code.
-
-even.K12.chunks <- filter(even.genome.chunks,chunk.transitions=='2-1')
-even.LTEE.chunks <- filter(even.genome.chunks,chunk.transitions=='1-2')
+even.K12.chunks <- filter(even.genome.chunks,chunk.transitions=='2-1') %>% mutate(segment.type='K-12')
+even.LTEE.chunks <- filter(even.genome.chunks,chunk.transitions=='1-2') %>% mutate(segment.type='REL606')
 
 ## join even and odd chunks.
 all.K12.chunks <- full_join(even.K12.chunks,odd.K12.chunks)
@@ -638,18 +681,17 @@ donor.and.deleted.markers <- full_join(all.chunk.summary,deleted.marker.summary)
 write.csv(donor.and.deleted.markers,"/Users/Rohandinho/Desktop/percent-greens-in-donor.csv")
 
 #########################################################################################################
-## I put Ara-3 'recipient' chunks into donor chunk plot to make figure 5.
-## This is what plot.K12.chunks is.
 
-old.Fig4 <- ggplot(odd.K12.chunks, aes(x=log10(chunk.length))) + geom_histogram() + facet_grid(lineage ~ .) + theme_classic() + xlab("log10(donor segment length)") + ylab("Count")
+all.odd.chunks <- full_join(odd.K12.chunks,odd.LTEE.chunks) %>%
+    ## reorder factor for plotting.
+    ungroup() %>%
+    mutate(lineage=factor(lineage,levels=levels(lineage)[c(7:12,1:6)]))
 
-plot.K12.chunks <- select(odd.K12.chunks,-chunk.transitions) %>% filter(lineage!='Ara-3') %>% full_join(filter(select(odd.LTEE.chunks,-chunk.transitions),lineage=='Ara-3'))
 
-Fig5 <- ggplot(plot.K12.chunks, aes(x=log10(chunk.length))) + geom_histogram() + facet_grid(lineage ~ .) + theme_classic() + xlab("log10(donor segment length)") + ylab("Count")
+Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram() + facet_grid(lineage ~ segment.type) + theme_classic() + xlab("log10(Segment Length)") + ylab("Count")
 
 ggsave("/Users/Rohandinho/Desktop/Fig5.pdf",Fig5)
 
-#Fig4B <- ggplot(LTEE.chunks,aes(x=log10(chunk.length),fill=lineage)) + geom_histogram() + facet_grid(lineage ~ .) + theme_classic() + xlab("log10(recipient chunk length)") + ylab("Count")
 
 ## NOTE! This test was done by inputting odd.genomes2 in the group_by call
 ## for odd.genome.chunks to remove mutators and obviously different genomes.
@@ -668,15 +710,6 @@ kruskal.test(chunk.length ~ lineage, data=odd.LTEE.chunks)
 skip.me <- c("Ara+2","Ara-3","Ara-2", "Ara+3", "Ara+6")
 kruskal.test(chunk.length ~ lineage, data=filter(odd.K12.chunks,!lineage %in% skip.me))
 kruskal.test(chunk.length ~ lineage, data=filter(odd.LTEE.chunks,!lineage %in% skip.me))
-
-## STATISTICAL TEST:
-## Is there evidence that recombination breakpoints are mutagenic?
-## TODO: find out what the average minimum distance is between new mutations
-## labeled '3' and breakpoints.
-## Then, drop mutations at random, and calculate average minimum distance to breakpoints.
-## repeat 10000 times to calculate a p-value.
-odd.breaks.and.muts <- filter(odd.genome.chunks, chunk.transitions=='2-1' | chunk.transitions=='1-2' | lbl == '3')
-odd.breaks.and.muts <- select(odd.genome.chunks,lineage,genome,mut.type,position,mut.annotation,chunk.transitions,lbl)
 
 
 ## Table 5. New synonymous mutations in evolved clones.
