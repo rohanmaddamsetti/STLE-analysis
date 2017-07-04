@@ -24,8 +24,6 @@
 
 ## Usage3: python label_mutations.py REL606 3 > ../results/LTEE-recipient-markers.csv
 
-
-
 ## Usage5: python label_mutations.py REL606 5 > ../results/poly_labeled_mutations.csv
 
 ## Usage6: python label_mutations.py REL606 6 > ../results/poly_LTEE-recipient-markers.csv
@@ -103,9 +101,16 @@ def parse_annotated_gd(gdfile):
                 mut_annotation = "non-coding"
             elif snp_type == 'pseudogene':
                 mut_annotation = "non-coding"
+            elif snp_type == 'noncoding':
+                mut_annotation = "non-coding"
         elif mut_type == "DEL":
-            ## mutation field already contains the length of the mutation.
-            mut_annotation = "deletion"
+            mut_annotation = "indel"
+        elif mut_type == "INS":
+            mut_annotation = "indel"
+        elif mut_type == 'SUB':
+            mut_annotation = 'base-substitution'
+        elif mut_type == 'MOB':
+            mut_annotation = 'IS-insertion'
         else:
             mut_annotation = "non-point"
 
@@ -327,10 +332,10 @@ def make_K12_diff_csv(data_dir):
     donor_name = get_genome_name(donor_gd)
     donor_dict = parse_annotated_gd(donor_gd)
     ## print header.
-    print("genome,mut.type,reference,position,mutation,mut.annotation,gene.annotation")
+    print("genome,mut.type,reference,position,mutation,mut.annotation,gene.annotation,frequency")
     for i in sorted(donor_dict.keys()):
-        for x in donor_dict[i]:
-            print(','.join([donor_name,x]))
+        x = donor_name + ',' + donor_dict[i]
+        print(x)
 
 def make_LTEE_marker_csv(data_dir):
     lineages = ['Ara+1', 'Ara+2', 'Ara+3', 'Ara+4', 'Ara+5', 'Ara+6',
@@ -401,8 +406,6 @@ def main():
     elif args.analysis_stage == 2:
         if args.ref_genome == 'REL606':
             make_K12_diff_csv(join(proj_dir,REL606_gd_dir))
-        elif args.ref_genome == 'K12':
-            pass
     elif args.analysis_stage == 3:
         if args.ref_genome == 'REL606':
             make_LTEE_marker_csv(join(proj_dir,REL606_gd_dir))

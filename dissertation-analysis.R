@@ -23,15 +23,33 @@ library(dplyr)       # consistent data.frame operations.
 library(dtplyr)      # dplyr works with data.table now.
 library(ggrepel)     # plot labeled scatterplots.
 library(zoo)
+library(pryr)
 
+## A reminder to what the labels are.
+## 0) reference genome state.
+## 1) B/K-12 marker is present that is not in reference genome (yellow)
+## 2) LTEE recipient mutations (red)
+## 3) new mutations (black)
+## 4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
+## 5) deleted markers (marker falls in a deleted region).
+## 6) REL288 specific marker
+## 7) REL291 specific marker
+## 8) REL296 specific marker
+## 9) REL298 specific marker
 
 #' function to rotate genome coordinates, setting oriC at the center of plots.
-rotate.chr <- function(my.position) {
-    REL606.LENGTH <- 4629812
-    ORIC <- 3886105
-    midpoint <- REL606.LENGTH/2
+rotate.chr <- function(my.position,genome='REL606') {
+    if (genome == 'REL606') {
+        GENOME.LENGTH <- 4629812
+        ORIC <- 3886105
+    } else if (genome == 'K-12') {
+        GENOME.LENGTH <- 4641652
+        ORIC <- 3925744
+    }
+
+    midpoint <- GENOME.LENGTH/2
     L <- ORIC - midpoint
-    ifelse(my.position > L,my.position-ORIC,REL606.LENGTH-ORIC+my.position)
+    ifelse(my.position > L,my.position-ORIC,GENOME.LENGTH-ORIC+my.position)
 }
 
 #############
@@ -80,22 +98,6 @@ K12.diff.data <- tbl_df(read.csv("../results/K-12-differences.csv")) %>%
 odd.genomes <- filter(labeled.mutations, odd==TRUE)
 even.genomes <- filter(labeled.mutations, odd==FALSE)
 
-#initialize introgression.score column.
-odd.genomes <- mutate(odd.genomes, introgression.score = 0)
-
-##This is a little helper to sum up labels (which is a factor)
-label.levels <- levels(labeled.mutations$lbl)
-labels.to.int <- sapply(label.levels, function(x) strtoi(x))
-
-##take all positions labeled with 1, and sum them up to get the introgression score.
-## omit Ara-3 (all K-12).
-scored.odd.genomes <- filter(odd.genomes,lineage != "Ara-3") %>%
-    filter(lbl=='1' | lbl=='0') %>%
-    group_by(position) %>%
-    summarize(introgression.score = sum(labels.to.int[lbl])) %>%
-    mutate(rotated.position=rotate.chr(position))
-
-
 ############
 ## Figure S1. Density of differences between K-12 and REL606.
 
@@ -104,70 +106,113 @@ FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=40
 ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1)
 
 ############################################################################################
+## Generate functions to make Figure 1, as well as related figures for the
+## LCA for STLE continuation experiment analysis.
+## The idea is to write a closure that returns specific versions of the 'Fig1 function'.
+
+Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
+
+    ## lvector is a vector of the factor levels to plot on the panel.
+    my.Fig1panel.function <- function(lvector) {
+        ## REL606 markers are negative space on the plot.
+        ## also, reverse levels to get Ara+1 genomes on top of plot.
+        ## ylim from 0 to 70. plot 6 genomes/lineages on 10,20,30,40,50. so map genome/lineage to a center position.
+
+
+        no.B.genomes <- filter(mut.df,lbl!='0')
+
+        if (analysis.type == 'Fig1') {
+            no.B.genomes <- no.B.genomes %>%
+                mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
+                mutate(genome=factor(genome,levels=rev(levels(genome)))) %>%
+                filter(lineage %in% lvector) %>%
+                mutate(y.center=70-match(genome,unique(genome))*10,
+                       x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
+
+
+        } else if (analysis.type == 'evoexpLCA') {
+            no.B.genomes <- no.B.genomes %>%
+                mutate(lineage=factor(lineage,levels=rev(levels(lineage)))) %>%
+                filter(lineage %in% lvector) %>%
+                mutate(y.center=70-match(lineage,unique(lineage))*10,
+                       x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
+        }
+
+        no.B.genomes <- no.B.genomes %>% mutate(lbl=as.factor(lbl))
+        ## label the top 54 G-scoring genes with symbols.
+        ## below this threshold, very short genes with 1 dN have a high G-score.
+        top.G.score.genes <- filter(G.score.data,G.score>8.9)
+        top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name)
+
+        ## label these mutations as points in the plot.
+        LTEE.top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
+            filter(lbl=='2' | lbl=='4' | lbl=='3') %>%
+            mutate(y.center=70-match(genome,unique(genome))*10,
+                   x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
+
+        ## reorder LTEE.top.hits$mut.annotation factor levels for nice plotting.
+        LTEE.top.hits$mut.annotation <- factor(LTEE.top.hits$mut.annotation, levels = c("dN", "dS", "indel", "IS-insertion", "base-substitution", "non-coding", "non-point"))
+
+
+        ## draw labels on the plot for high G-score mutations.
+        genes.to.label <- filter(top.G.score.genes,Gene.name %in% top.hits$gene.annotation)
+
+        panel.labels <- select(LTEE.top.hits,lineage,genome,rotated.position,gene.annotation,y.center) %>%
+            group_by(lineage) %>% mutate(ypos=mean(y.center))
+
+        Fig1.xlab <- expression(paste("Distance from ",italic("oriC")))
+        ## all donor mutations should be labeled as yellow.
+        panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
+            geom_segment(size=0.05) +
+            theme_classic() +
+            xlab(Fig1.xlab) +
+            ylim(5,70) + guides(colour=FALSE) +
+            geom_jitter(data=LTEE.top.hits,aes(x=rotated.position,
+                                               y=y.center,
+                                               color=lbl,
+                                               shape=mut.annotation),
+                        width=0,
+                        height=1) +
+            ## set the symbols this way:
+            ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
+            scale_shape_manual(values = c(1,0,2,4)) +
+            guides(shape=FALSE) +
+            geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
+            ## label genes that are in the text at the top.
+            geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE) +
+            scale_colour_manual(values=c('yellow', 'red', 'black','green','blue','tan1','tan2','tan3','tan4'))
+
+        if (analysis.type == 'Fig1') {
+            panel <- panel +
+                ylab("Clone") +
+                scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$genome)))
+        } else if (analysis.type == 'evoexpLCA') {
+            panel <- panel +
+                ylab("Inferred LCA of Population") +
+                scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$lineage)))
+        }
+        return(panel)
+    }
+
+    return(my.Fig1panel.function)
+}
+
+############################################################################################
 ## make Figure 1.
 ## break Figure 1 into 4 panels, three lineages per page (both clones on a page).
 
-##IDEA: add a border to points where a new mutation occurs in a gene where an old mutation was deleted.
+makeFig1panel <- Fig1.factory(labeled.mutations, G.score.data, analysis.type='Fig1')
 
-makeFig1panel <- function(labeled.mutations,G.score.data,l1,l2,l3) {
-    ## REL606 markers are negative space on the plot.
-    ## also, reverse levels to get Ara+1 genomes on top of plot.
-    ## ylim from 0 to 70. plot 6 genomes on 10,20,30,40,50. so map genome to a center position.
-
-    no.B.genomes <- filter(labeled.mutations,lbl!='0') %>%
-        mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
-        mutate(genome=factor(genome,levels=rev(levels(genome)))) %>%
-        filter(lineage==l1 | lineage==l2 | lineage==l3) %>%
-        mutate(y.center=70-match(genome,unique(genome))*10,
-               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3) %>%
-        mutate(lbl=as.factor(lbl))
-
- ## label the top 54 G-scoring genes with symbols.
-    ## below this threshold, very short genes with 1 dN have a high G-score.
-    top.G.score.genes <- filter(G.score.data,G.score>8.9)
-
-    top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name)
-
-    ## label these mutations as points in the plot.
-    LTEE.top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
-        filter(lbl=='2' | lbl=='4' | lbl=='3') %>%
-        mutate(y.center=70-match(genome,unique(genome))*10,
-               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
-
-    ## draw labels on the plot for high G-score mutations.
-    genes.to.label <- filter(top.G.score.genes,Gene.name %in% top.hits$gene.annotation)
-
-    panel.labels <- select(LTEE.top.hits,lineage,genome,rotated.position,gene.annotation,y.center) %>%
-        group_by(lineage) %>% mutate(ypos=mean(y.center))
-
-    Fig1.xlab <- expression(paste("Distance from ",italic("oriC")))
-    ## all donor mutations should be labeled as yellow.
-    panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
-        geom_segment(size=0.05) +
-        scale_colour_manual(values=c('yellow', 'red', 'black','green','blue','tan1','tan2','tan3','tan4')) +
-        theme_classic() +
-        xlab(Fig1.xlab) +
-        ylab("Clone") + ylim(5,70) + guides(colour=FALSE) +
-        scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$genome)))+
-        geom_point(data=LTEE.top.hits,aes(x=rotated.position,y=y.center,color=lbl,shape=mut.annotation)) + guides(shape=FALSE) +
-        #geom_segment(data=genes.to.label, aes(x=Start.position,xend=Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
-        geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
-        ## label genes that are in the text at the top.
-        geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE)
-
-    return(panel)
-}
-
-panel1 <- makeFig1panel(labeled.mutations,G.score.data,"Ara+1","Ara+2","Ara+3")
+panel1 <- makeFig1panel(c("Ara+1","Ara+2","Ara+3"))
 ggsave("/Users/Rohandinho/Desktop/Fig1A.pdf", panel1,width=9.5,height=8)
 
-panel2 <- makeFig1panel(labeled.mutations,G.score.data,"Ara+4","Ara+5","Ara+6")
+panel2 <- makeFig1panel(c("Ara+4","Ara+5","Ara+6"))
 ggsave("/Users/Rohandinho/Desktop/Fig1B.pdf", panel2,width=9.5,height=8)
 
-panel3 <- makeFig1panel(labeled.mutations,G.score.data,"Ara-1","Ara-2","Ara-3")
+panel3 <- makeFig1panel(c("Ara-1","Ara-2","Ara-3"))
 ggsave("/Users/Rohandinho/Desktop/Fig1C.pdf", panel3,width=9.5,height=8)
 
-panel4 <- makeFig1panel(labeled.mutations,G.score.data,"Ara-4","Ara-5","Ara-6")
+panel4 <- makeFig1panel(c("Ara-4","Ara-5","Ara-6"))
 ggsave("/Users/Rohandinho/Desktop/Fig1D.pdf", panel4,width=9.5,height=8)
 
 ##############################################################################
@@ -186,13 +231,13 @@ donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summaris
 Fig2 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_classic() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1))
 ggsave("/Users/Rohandinho/Desktop/Fig2.pdf",Fig2,width=11,height=8)
 
-############# Fig. S2: location of donor specific mutations on the chromosome.
-## TODO: Make FigS2 look much better.
+############# Fig. S3: location of donor specific mutations on the chromosome.
+## TODO: Make FigS3 look much better.
 only.donor.mutations <- donor.mutations %>%
     mutate(y.center=35-match(lbl,sort(unique(lbl)))*10,y1=y.center-3,y2=y.center+3)
 
 
-FigS2 <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.position,y=y1,yend=y2,colour=lbl)) +
+FigS3 <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.position,y=y1,yend=y2,colour=lbl)) +
     geom_segment(size=0.05) + theme_classic() +
     scale_colour_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) +
     xlab(oriC.xlab) +
@@ -202,33 +247,7 @@ FigS2 <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.positio
     ## add annotation of Hfr and oriC on chromosome.
    geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
 
-ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2,width=11,height=8)
-
-#############################################################
-## Figure 3. Visual comparisons of parallel recombination across lineages
-## with the G-score of mutations over the genome, and with the occurrence of
-## new mutations over the genome.
-## This is only made with odd genomes at the moment.
-
-## which genes get introgressed the most? is this a sign of positive selection?
-gene.test <- filter(odd.genomes,lineage != "Ara-3") %>%
-    filter(lbl=='1' | lbl=='0') %>%
-    group_by(gene.annotation) %>%
-    summarize(introgression.score = sum(labels.to.int[lbl])) %>% arrange(desc(introgression.score))
-
-## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
-new.odd.mutations <- filter(odd.genomes,lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>% filter(lbl=='3')
-
-Fig3 <- ggplot(scored.odd.genomes, aes(x=rotated.position,y=introgression.score)) + geom_line(size=0.05) + theme_classic() +
-    xlab(oriC.xlab) + ylab("Introgression Score") +
-    ## add auxotroph lines
-    geom_vline(data=auxotrophs,aes(xintercept=rotated.position),size=0.05,linetype="dashed") +
-    geom_text_repel(data=auxotrophs,aes(x=rotated.position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
-    ## add annotation of Hfr and oriC on chromosome.
-   geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
-
-ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3)
-
+ggsave("/Users/Rohandinho/Desktop/FigS3.pdf",FigS3,width=11,height=8)
 
 #############################
 ## Probable beneficial mutations.
@@ -242,9 +261,52 @@ LTEE.top.hits <- filter(labeled.mutations, gene.annotation %in% top.G.score.gene
 genes.to.label <- filter(top.G.score.genes,Gene.name %in% LTEE.top.hits$gene.annotation)
 ## gene.to.label contains 31 genes.
 
+#############################################################
+## Figure S2 and Figure 3.
 
-###########
-## Fig. S3: Does sequence divergence/conservation predict location of markers? NO.
+score.introgression <- function(independent.genomes) {
+    ##initialize introgression.score column.
+    independent.genomes <- mutate(independent.genomes, introgression.score = 0)
+
+    ##This is a little helper to sum up labels (which is a factor)
+    label.levels <- levels(independent.genomes$lbl)
+    K12.labels <- c(1,4,6,7,8,9)
+    labels.to.int <- sapply(label.levels, function(x) ifelse(x %in% K12.labels,1,0))
+
+    ##take all positions labeled with 1, and sum them up to get the introgression score.
+    ## omit Ara-3 (mostly K-12).
+    introgression.scores <- filter(independent.genomes,lineage != "Ara-3") %>%
+        group_by(rotated.position) %>%
+        summarize(introgression.score = sum(labels.to.int[lbl])) %>%
+        left_join(distinct(select(independent.genomes,rotated.position,gene.annotation))) %>%
+        arrange(desc(introgression.score))
+
+return(introgression.scores)
+}
+
+get.introgressed.genes <- function(introgression.scores) {
+    select(introgression.scores,-rotated.position) %>% distinct()
+}
+
+makeFig3 <- function(scores, auxotrophs, hfrs) {
+
+    oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
+
+    Fig3 <- ggplot(scores, aes(x=rotated.position,y=introgression.score)) + geom_line(size=0.05) + theme_classic() +
+        xlab(oriC.xlab) + ylab("Introgression Score") +
+        ## add auxotroph lines
+        geom_vline(data=auxotrophs,aes(xintercept=rotated.position),size=0.05,linetype="dashed") +
+        geom_text_repel(data=auxotrophs,aes(x=rotated.position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
+        ## add annotation of Hfr and oriC on chromosome.
+        geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
+}
+
+odd.introgression.scores <- score.introgression(odd.genomes)
+
+## which genes get introgressed the most? is this a sign of positive selection?
+odd.introgressed.genes <- get.introgressed.genes(odd.introgression.scores)
+
+## Fig. S2: Does sequence divergence/conservation predict location of markers? NO.
 ## Perhaps do this differently after showing to Rich.
 ## make a scatterplot of Fig. S1 and Fig. 3.
 
@@ -256,7 +318,11 @@ REL606.LENGTH <- 4629812
 ## use 556 bins. Each is 8327 bp long (integer divisors)
 bin.length <- REL606.LENGTH/556
 
-introgression.vs.divergence.data <- right_join(K12.diff.data,scored.odd.genomes) %>%
+## BUG: yegZ dS mutation has NA introgression score; there are two mutations at the same position in yegZ in annotated_K-12.gd,
+## probably due to conflicting donor-specific mutations. This is very minor (only seems to affect one mutation)
+## so fix this later, if at all.
+
+introgression.vs.divergence.data <- left_join(K12.diff.data,odd.introgression.scores) %>%
     ## bin mutations across the genome.
     ## NOTE: equal size bins, NOT equal numbers of mutations!
     mutate(my_bin=ceiling(position/bin.length)) %>% group_by(my_bin)
@@ -264,20 +330,33 @@ introgression.vs.divergence.data <- right_join(K12.diff.data,scored.odd.genomes)
 two.classed.introgression.data <- introgression.vs.divergence.data %>%
     summarize(introgression=ifelse(mean(introgression.score)>0,1,0),divergence=n())
 
-## no difference in divergence between regions with and without introgression. p = 0.8691.
+## no difference in divergence between regions with and without introgression. p = 0.8756.
 kruskal.test(divergence ~ introgression,data=two.classed.introgression.data)
 
 median.introgression.data <- introgression.vs.divergence.data %>%
-    summarize(introgression=median(introgression.score),divergence=n()) %>% filter(introgression > 0)
+    summarize(median.introgression=median(introgression.score),divergence=n()) %>% filter(median.introgression > 0)
 
-introgression.divergence.model <- lm(introgression~divergence,data=median.introgression.data)
+introgression.divergence.model <- lm(median.introgression~divergence,data=median.introgression.data)
 confint(introgression.divergence.model)
 
-##ggsave("/Users/Rohandinho/Desktop/FigS3.pdf",FigS3,width=11,height=8)
+FigS2 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
+    geom_jitter() + ylab("Median Introgression") + xlab("Divergence") +
+    theme_classic()
+
+ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2,width=11,height=8)
+
+## Figure 3.
+## Visual comparisons of parallel recombination across lineages
+## with the G-score of mutations over the genome, and with the occurrence of
+## new mutations over the genome.
+## This is only made with odd genomes at the moment.
+
+Fig3 <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
+ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3)
 
 
 ####################################################################################################
-## Erased mutations. Table 3 and Figure 3 (Fig. 3 is made separately).
+## Erased mutations. Table 3 and Figure 4 (Fig. 4 is made separately).
 
 #### Make in-depth alignments of all erased mutations, with special attention to Ara+1 and Ara-4.
 #### Print out a csv of genes for align_erased_mutations.py to align,
@@ -298,8 +377,12 @@ write.csv(erased.gene.list,"../results/align_these.csv",row.names=FALSE,quote=FA
 ## Started by looking for parallelism in new mutations: super strong parallelism (multiple new mutations in the same
 ## gene is probably gene conversion or something.
 
+## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
+new.odd.mutations <- filter(odd.genomes,lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>% filter(lbl=='3')
+
 ## First: filter out cases when 3 or more new mutations occur in the same gene in the same odd-numbered genome
 ## (most likely not a new mutation).
+
 gene.convs <- group_by(new.odd.mutations,lineage) %>% group_by(gene.annotation) %>% filter(n()>=3)
 rest.new.odd.mutations <- group_by(new.odd.mutations,lineage) %>% group_by(gene.annotation) %>% filter(n()<3)
 
@@ -452,34 +535,27 @@ clone.K12.segments <- K12.clone.data %>% do(find.K12.segments(.))
 odd.clone.K12.segments <- odd.K12.clone.data %>% do(find.K12.segments(.))
 
 ## Now, annotate those segments.
-annotated.fixed.K12.segments <- annotate.segments(fixed.K12.segments,K12.genes)
-annotated.clone.K12.segments <- annotate.segments(clone.K12.segments,K12.genes)
-odd.annotated.clone.K12.segments <- annotate.segments(odd.clone.K12.segments,K12.genes)
+annotated.fixed.K12.segments <- annotate.segments(fixed.K12.segments,K12.genes) %>% mutate(length=end-start)
+annotated.clone.K12.segments <- annotate.segments(clone.K12.segments,K12.genes) %>% mutate(length=end-start)
+odd.annotated.clone.K12.segments <- annotate.segments(odd.clone.K12.segments,K12.genes) %>% mutate(length=end-start)
 
 write.csv(x=annotated.clone.K12.segments,file=file.path(K12.specific.dir,"clone.K12.segs.csv"))
 write.csv(x=annotated.fixed.K12.segments,file=file.path(K12.specific.dir,"fixed.K12.segs.csv"))
 
-## Make tables and figures.
 
 ## This shows that IS5 transposons found in K-12 but not in REL606,
 ## as shown by a BLAST search, have introgressed into evolved genomes
 ## (can't tell if fixed since occur at multiple copies)
 fixed.K12.seg.parallelism <- annotated.fixed.K12.segments %>% group_by(gene,locus_tag) %>% summarise(count=n()) %>% arrange(desc(count),locus_tag)
 
-
-## TODO: DOUBLE CHECK THESE NUMBERS BY HAND!
+## TODO: DOUBLE CHECK THESE NUMBERS BY HAND IF REPORTED IN THE PAPER!
 clone.K12.seg.parallelism <- odd.annotated.clone.K12.segments %>% group_by(gene,locus_tag) %>% summarise(count=n()) %>% arrange(desc(count),locus_tag)
 
-## TODO: generalize the code for making Fig. 1 and Fig. 2 to avoid code duplication,
-## and then use here for the K-12 specific introgression, fixed mutations
-## in the STLE continuation experiment, and for the clones.
-
-
-####TODO:  ####          ######                     ##########      ##  ###  #      #######        ##########       ######    ####    ####
-##              MAKE             K-12 SPECIFIC GENES           FIGURES          AND         TABLES!!!!
-## Figure S3 A,B,C,D: K-12 specific genes based on K12-reference numbering.
-## Figure S4: Parallel introgression of K-12 specific genes.
-
+## plot distribution of K-12 specific segment lengths.
+fixed.K12.segment.plot <- ggplot(annotated.fixed.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Population ~ .) + theme_classic()
+ggsave("/Users/Rohandinho/Desktop/fixed-K12-segments.pdf",fixed.K12.segment.plot)
+clone.K12.segment.plot <- ggplot(annotated.clone.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Name ~ .) + theme_classic()
+ggsave("/Users/Rohandinho/Desktop/clone-K12-segments.pdf",clone.K12.segment.plot)
 
 #######################################################
 ## Map recombination breakpoints. Currently breakpoints occur ON
@@ -496,9 +572,6 @@ clone.K12.seg.parallelism <- odd.annotated.clone.K12.segments %>% group_by(gene,
 ## NOTE: in reality breakpoints lie between the i-1 and ith markers,
 ## whereas this code places breakpoints at the ith marker,
 ## so these lengths are an approximation at best.
-
-## It would be GREAT if I could write this without a for loop,
-## this is a 15 second speed bottleneck.
 
 labels.to.chunks <- function(labelz) {
     chunks <- rep('0',length(labelz))
@@ -627,9 +700,6 @@ calc.chunks <- function(odd.genomes) {
     return(genome.chunks)
 }
 
-#########################################
-
-
 ## The group_by call is important, so that different genomes are processed
 ## separately.
 odd.genome.chunks <- calc.chunks(odd.genomes)
@@ -687,14 +757,14 @@ all.odd.chunks <- full_join(odd.K12.chunks,odd.LTEE.chunks) %>%
     ungroup() %>%
     mutate(lineage=factor(lineage,levels=levels(lineage)[c(7:12,1:6)]))
 
-
-Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram() + facet_grid(lineage ~ segment.type) + theme_classic() + xlab("log10(Segment Length)") + ylab("Count")
+Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=30) +
+    facet_grid(lineage ~ segment.type, scales="free_y") +
+    theme_classic() +
+    xlab("log10(Segment Length)") +
+    ylab("Count")
 
 ggsave("/Users/Rohandinho/Desktop/Fig5.pdf",Fig5)
 
-
-## NOTE! This test was done by inputting odd.genomes2 in the group_by call
-## for odd.genome.chunks to remove mutators and obviously different genomes.
 ## STATISTICAL TEST:
 ## are the distributions of K-12 chunks (or LTEE chunks)
 ## identical across replicate recombinant lines? Answer: similar, but not draws
@@ -729,7 +799,7 @@ recomb.mut.ratio.table <- filter(labeled.mutations,mut.annotation=='dS') %>%
     mutate(event.r.over.m.ratio=recombination.events/tot.new.dS)
 
 
-write.csv(recomb.mut.ratio.table,"../results/recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
+write.csv(recomb.mut.ratio.table,"../results/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
 
 ####################################################################################################
 ## Analyze evolution experiment results.
@@ -743,12 +813,16 @@ evoexp.data2 <- evoexp.data %>%
     arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
     mutate(initial.freq = frequency) %>% mutate(final.freq = lead(frequency)) %>%
     mutate(delta.freq=lead(frequency)-frequency) %>%
-    na.omit()  %>% select(-generation) %>% ungroup()
+    na.omit()  %>% select(-generation) %>% ungroup() %>%
+    ## reverse polarity of frequency estimates for erased mutations (lbl == 4).
+    ## DOUBLE-CHECK THIS TO MAKE SURE NO BUGS!!!!
+    mutate(initial.freq = ifelse(lbl==4,1-initial.freq,initial.freq)) %>%
+    mutate(final.freq = ifelse(lbl==4,1-final.freq,final.freq))
 
 ## look at erased mutations (lbl == 4).
 evoexp.erased.mutations <- evoexp.data2 %>% filter(lbl==4,final.freq>0)
-## Almost all of these mutations are in the hypermutators Ara+6,Ara+3.
-## Interestingly enough, the initial.freq for all these erased mutations is 0.
+
+
 
 ################
 ## Figure 7.
@@ -756,11 +830,11 @@ evoexp.erased.mutations <- evoexp.data2 %>% filter(lbl==4,final.freq>0)
 ## However, selection is already acting on deleterious K-12 mutations.
 ## See Good and Desai (2014) for discussion of deleterious hitchhikers.
 K12.evoexp.data2 <- filter(evoexp.data2,lbl==1)
-Fig6.cluster.plot <- ggplot(K12.evoexp.data2, aes(x=initial.freq,y=final.freq,color=position)) +
+Fig7.cluster.plot <- ggplot(K12.evoexp.data2, aes(x=initial.freq,y=final.freq,color=position)) +
     geom_point(size=0.3) + theme_classic() + geom_abline(slope=1,intercept=0) +
     scale_color_viridis(option="plasma") +
     facet_wrap( ~ lineage , ncol=4)
-ggsave("/Users/Rohandinho/Desktop/Fig6.pdf",Fig6.cluster.plot)
+ggsave("/Users/Rohandinho/Desktop/Fig7.pdf",Fig7.cluster.plot)
 
 dN.K12.evoexp.data2 <- K12.evoexp.data2 %>% filter(mut.annotation=='dN')
 dN.cluster.plot <- ggplot(dN.K12.evoexp.data2, aes(x=initial.freq,y=final.freq,color=position)) +
@@ -869,111 +943,25 @@ binom.test(2967,9408,p=6726/21551)
 
 ########
 ## Make Figures 7 and 8. Respectively these are
-## versions of Figs. 1 and 2, using mutations that fixed in the STLE to estimate
+## versions of Figs. 1 and 3, using mutations that fixed in the STLE to estimate
 ## the LCA of each STLE population.
 
-make_LCA_Fig1panel <- function(labeled.mutations,G.score.data,l1,l2,l3,l4,l5,l6) {
-    ## REL606 markers are negative space on the plot.
-    ## also, reverse levels to get Ara+1 genomes on top of plot.
-    ## ylim from 0 to 70. plot 6 genomes on 10,20,30,40,50. so map genome to a center position.
-
-    no.B.genomes <- filter(labeled.mutations,lbl!='0') %>%
-        mutate(lineage=factor(lineage,levels=rev(levels(lineage)))) %>%
-        filter(lineage==l1 | lineage==l2 | lineage==l3 | lineage == l4 | lineage == l5 | lineage == l6) %>%
-        mutate(y.center=70-match(lineage,unique(lineage))*10,
-               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3) %>%
-        mutate(lbl=as.factor(lbl))
-
- ## label the top 54 G-scoring genes with symbols.
-    ## below this threshold, very short genes with 1 dN have a high G-score.
-    top.G.score.genes <- filter(G.score.data,G.score>8.9)
-
-    top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name)
-
-    ## label these mutations as points in the plot.
-    LTEE.top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
-        filter(lbl=='2' | lbl=='4' | lbl=='3') %>%
-        mutate(y.center=70-match(genome,unique(genome))*10,
-               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
-
-    ## draw labels on the plot for high G-score mutations.
-    genes.to.label <- filter(top.G.score.genes,Gene.name %in% top.hits$gene.annotation)
-
-    panel.labels <- select(LTEE.top.hits,lineage,genome,rotated.position,gene.annotation,y.center) %>%
-        group_by(lineage) %>% mutate(ypos=mean(y.center))
-
-    Fig1.xlab <- expression(paste("Distance from ",italic("oriC")))
-    ## all donor mutations should be labeled as yellow.
-    panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
-        geom_segment(size=0.05) +
-        ## NOTE: NO GREEN MUTATIONS BECAUSE NO ERASED MUTATIONS. SHOULD MAP LBL TO COLOR IN A BETTER WAY.
-        scale_colour_manual(values=c('yellow', 'red', 'black','blue','tan1','tan2','tan3','tan4')) +
-        theme_classic() +
-        xlab(Fig1.xlab) +
-        ylab("Inferred LCA of Population") + ylim(5,70) + guides(colour=FALSE) +
-        scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$lineage)))+
-        geom_point(data=LTEE.top.hits,aes(x=rotated.position,y=y.center,color=lbl,shape=mut.annotation)) + guides(shape=FALSE) +
-        #geom_segment(data=genes.to.label, aes(x=Start.position,xend=Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
-        geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
-        ## label genes that are in the text at the top.
-        geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE)
-
-    return(panel)
-}
 
 LCA.evoexp.data <- filter(evoexp.data2,initial.freq==1 & final.freq == 1)
 
-LCApanel1 <- make_LCA_Fig1panel(LCA.evoexp.data,G.score.data,"Ara+1","Ara+2","Ara+3", "Ara+4", "Ara+5", "Ara+6")
+makeLCA_Fig1panel <- Fig1.factory(LCA.evoexp.data,G.score.data,analysis.type='evoexpLCA')
+
+LCApanel1 <- makeLCA_Fig1panel(c("Ara+1","Ara+2","Ara+3", "Ara+4", "Ara+5", "Ara+6"))
 ggsave("/Users/Rohandinho/Desktop/LCA_Fig1A.pdf", LCApanel1,width=9.5,height=8)
 
-LCApanel2 <- make_LCA_Fig1panel(LCA.evoexp.data,G.score.data,"Ara-1","Ara-2","Ara-3", "Ara-4", "Ara-5", "Ara-6")
+LCApanel2 <- makeLCA_Fig1panel(c("Ara-1","Ara-2","Ara-3", "Ara-4", "Ara-5", "Ara-6"))
 ggsave("/Users/Rohandinho/Desktop/LCA_Fig1B.pdf", LCApanel2,width=9.5,height=8)
 
+scored.LCA.evoexp.data <- score.introgression(LCA.evoexp.data)
+LCA.introgressed.genes <- get.introgressed.genes(scored.LCA.evoexp.data)
 
-makeLCA_Fig2 <- function(LCA.evoexp.data,hand.annotation) {
-    ## no need to worry about even or odd clones.
-
-    ##annotate auxotrophs and Hfr oriTs on Fig2 type plots.
-    auxotrophs <- filter(hand.annotation,annotation!="Hfr"&annotation!="oriC")
-    hfrs <- filter(hand.annotation,annotation=="Hfr")
-
-    ##initialize introgression.score column.
-    LCA.evoexp.data <- mutate(LCA.evoexp.data, introgression.score = 0)
-
-    ##This is a little helper to sum up labels (which is a factor)
-    label.levels <- levels(LCA.evoexp.data$lbl)
-    labels.to.int <- sapply(label.levels, function(x) strtoi(x))
-
-    ##take all positions labeled with 1, and sum them up to get the introgression score.
-    ## omit Ara-3 (all K-12).
-    scored.LCA.evoexp.data <- filter(LCA.evoexp.data,lineage != "Ara-3") %>%
-        filter(lbl=='1' | lbl=='0') %>%
-        group_by(position) %>%
-        summarize(introgression.score = sum(labels.to.int[lbl])) %>%
-        mutate(rotated.position=rotate.chr(position))
-
-    ## which genes get introgressed the most? is this a sign of positive selection?
-    gene.test <- filter(LCA.evoexp.data,lineage != "Ara-3") %>%
-        filter(lbl=='1' | lbl=='0') %>%
-        group_by(gene.annotation) %>%
-        summarize(introgression.score = sum(labels.to.int[lbl])) %>% arrange(desc(introgression.score))
-
-    Fig2.xlab <- expression(paste("Distance from ",italic("oriC")))
-    LCA_Fig2 <- ggplot(scored.LCA.evoexp.data, aes(x=rotated.position,y=introgression.score)) + geom_line(size=0.05) + theme_classic() +
-        xlab(Fig2.xlab) + ylab("Introgression Score") +
-        ## add auxotroph lines
-        geom_vline(data=auxotrophs,aes(xintercept=rotated.position),size=0.05,linetype="dashed") +
-        geom_text_repel(data=auxotrophs,aes(x=rotated.position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
-        ## add annotation of Hfr and oriC on chromosome.
-        geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
-
-    return(LCA_Fig2)
-
-}
-
-
-LCA_Fig2 <- makeLCA_Fig2(LCA.evoexp.data,hand.annotation)
-ggsave("/Users/Rohandinho/Desktop/LCA_Fig2.pdf",LCA_Fig2)
+LCA_Fig3 <- makeFig3(scored.LCA.evoexp.data,auxotrophs,hfrs)
+ggsave("/Users/Rohandinho/Desktop/LCA_Fig3.pdf",LCA_Fig3)
 
 ## A reminder to what the labels are.
 ## 0) reference genome state.
