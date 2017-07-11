@@ -16,14 +16,12 @@ library(ggplot2)     # base plots are for Coursera professors
 library(scales)      # pairs nicely with ggplot2 for plot label formatting
 library(gridExtra)   # a helper for arranging individual ggplot objects
 library(ggthemes)    # has a clean theme for ggplot2
-library(viridis)     # best. color. palette. evar.
 library(DT)          # prettier data.frame output
 library(data.table)  # faster fread()
 library(dplyr)       # consistent data.frame operations.
 library(dtplyr)      # dplyr works with data.table now.
 library(ggrepel)     # plot labeled scatterplots.
 library(zoo)
-library(pryr)
 
 ## A reminder to what the labels are.
 ## 0) reference genome state.
@@ -118,7 +116,6 @@ Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
         ## also, reverse levels to get Ara+1 genomes on top of plot.
         ## ylim from 0 to 70. plot 6 genomes/lineages on 10,20,30,40,50. so map genome/lineage to a center position.
 
-
         no.B.genomes <- filter(mut.df,lbl!='0')
 
         if (analysis.type == 'Fig1') {
@@ -129,7 +126,6 @@ Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
                 mutate(y.center=70-match(genome,unique(genome))*10,
                        x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
 
-
         } else if (analysis.type == 'evoexpLCA') {
             no.B.genomes <- no.B.genomes %>%
                 mutate(lineage=factor(lineage,levels=rev(levels(lineage)))) %>%
@@ -138,15 +134,20 @@ Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
                        x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
         }
 
-        no.B.genomes <- no.B.genomes %>% mutate(lbl=as.factor(lbl))
+        no.B.genomes <- no.B.genomes %>%
+            ## turn lbls for donor-specific markers into K-12 lbls.
+            mutate(lbl = replace(lbl,lbl %in% c('6','7','8','9'),'1')) %>%
+            ## then turn into a factor.
+            mutate(lbl=factor(lbl))
+
         ## label the top 54 G-scoring genes with symbols.
         ## below this threshold, very short genes with 1 dN have a high G-score.
         top.G.score.genes <- filter(G.score.data,G.score>8.9)
-        top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name)
 
         ## label these mutations as points in the plot.
         LTEE.top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
-            filter(lbl=='2' | lbl=='4' | lbl=='3') %>%
+            ## NOTE: do I need this filter or not?
+            filter(lbl=='2' | lbl=='3' | lbl=='4') %>%
             mutate(y.center=70-match(genome,unique(genome))*10,
                    x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
 
@@ -166,7 +167,7 @@ Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
             geom_segment(size=0.05) +
             theme_classic() +
             xlab(Fig1.xlab) +
-            ylim(5,70) + guides(colour=FALSE) +
+            ylim(5,70) +
             geom_jitter(data=LTEE.top.hits,aes(x=rotated.position,
                                                y=y.center,
                                                color=lbl,
@@ -175,12 +176,17 @@ Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
                         height=1) +
             ## set the symbols this way:
             ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
-            scale_shape_manual(values = c(1,0,2,4)) +
-            guides(shape=FALSE) +
-            geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
+            scale_shape_manual(values = c(1,0,2,4),name="symbol") +
+            theme(legend.position = "top") +
+           ##geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
             ## label genes that are in the text at the top.
-            geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE) +
-            scale_colour_manual(values=c('yellow', 'red', 'black','green','blue','tan1','tan2','tan3','tan4'))
+            ##geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE) +
+            geom_text_repel(data=filter(LTEE.top.hits,lbl %in% c(3,4)),aes(x=rotated.position,
+                                               y=y.center,label=gene.annotation),fontface='italic',size=2.5) +
+            scale_colour_manual(values=c('#ffffbf', '#abd9e9', 'black','#d7191c','#f1b6da'),
+                                name='color',
+                                labels=c("K-12","LTEE","new","erased","deleted"))
+
 
         if (analysis.type == 'Fig1') {
             panel <- panel +
@@ -201,19 +207,21 @@ Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
 ## make Figure 1.
 ## break Figure 1 into 4 panels, three lineages per page (both clones on a page).
 
-makeFig1panel <- Fig1.factory(labeled.mutations, G.score.data, analysis.type='Fig1')
+make_Fig1_panel <- Fig1.factory(odd.genomes, G.score.data, analysis.type='Fig1')
 
-panel1 <- makeFig1panel(c("Ara+1","Ara+2","Ara+3"))
-ggsave("/Users/Rohandinho/Desktop/Fig1A.pdf", panel1,width=9.5,height=8)
+panelA <- make_Fig1_panel(c("Ara+1","Ara+2","Ara+3","Ara+4","Ara+5","Ara+6"))
+ggsave("/Users/Rohandinho/Desktop/Fig1A.pdf", panelA,width=9.5,height=8)
 
-panel2 <- makeFig1panel(c("Ara+4","Ara+5","Ara+6"))
-ggsave("/Users/Rohandinho/Desktop/Fig1B.pdf", panel2,width=9.5,height=8)
+panelB <- make_Fig1_panel(c("Ara-1","Ara-2","Ara-3","Ara-4","Ara-5","Ara-6"))
+ggsave("/Users/Rohandinho/Desktop/Fig1B.pdf", panelB,width=9.5,height=8)
 
-panel3 <- makeFig1panel(c("Ara-1","Ara-2","Ara-3"))
-ggsave("/Users/Rohandinho/Desktop/Fig1C.pdf", panel3,width=9.5,height=8)
+make_FigS1_panel <- Fig1.factory(even.genomes, G.score.data, analysis.type='Fig1')
 
-panel4 <- makeFig1panel(c("Ara-4","Ara-5","Ara-6"))
-ggsave("/Users/Rohandinho/Desktop/Fig1D.pdf", panel4,width=9.5,height=8)
+panelS1A <- make_FigS1_panel(c("Ara+1","Ara+2","Ara+3","Ara+4","Ara+5","Ara+6"))
+ggsave("/Users/Rohandinho/Desktop/FigS1A.pdf", panelS1A,width=9.5,height=8)
+
+panelS1B <- make_FigS1_panel(c("Ara-1","Ara-2","Ara-3","Ara-4","Ara-5","Ara-6"))
+ggsave("/Users/Rohandinho/Desktop/FigS1B.pdf", panelS1B,width=9.5,height=8)
 
 ##############################################################################
 ############## Fig. 2: Number of donor specific mutations in each clone.
@@ -804,72 +812,66 @@ write.csv(recomb.mut.ratio.table,"../results/Table5_recomb_mut_ratio.csv",row.na
 ####################################################################################################
 ## Analyze evolution experiment results.
 
+## A reminder to what the labels are.
+## 0) reference genome state.
+## 1) B/K-12 marker is present that is not in reference genome (yellow)
+## 2) LTEE recipient mutations (red)
+## 3) new mutations (black)
+## 4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
+## 5) deleted markers (marker falls in a deleted region).
+## 6) REL288 specific marker
+## 7) REL291 specific marker
+## 8) REL296 specific marker
+## 9) REL298 specific marker
+
 evoexp.data <- evoexp.labeled.mutations %>%
     mutate(generation=ifelse(grepl('149',genome),1000,1200)) %>%
-    mutate(frequency=ifelse(is.na(frequency),0,frequency))
-
-## cluster mutations based on initial frequency, final frequency, and genomic position.
-evoexp.data2 <- evoexp.data %>%
+    ## if a mutation has frequency 'NA', it is either 0,4,5.
+    ## therefore, it is a fixed B marker or a fixed erased or deleted mutation.
+    mutate(frequency=ifelse(is.na(frequency),1,frequency)) %>%
     arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
     mutate(initial.freq = frequency) %>% mutate(final.freq = lead(frequency)) %>%
     mutate(delta.freq=lead(frequency)-frequency) %>%
-    na.omit()  %>% select(-generation) %>% ungroup() %>%
-    ## reverse polarity of frequency estimates for erased mutations (lbl == 4).
-    ## DOUBLE-CHECK THIS TO MAKE SURE NO BUGS!!!!
-    mutate(initial.freq = ifelse(lbl==4,1-initial.freq,initial.freq)) %>%
-    mutate(final.freq = ifelse(lbl==4,1-final.freq,final.freq))
-
-## look at erased mutations (lbl == 4).
-evoexp.erased.mutations <- evoexp.data2 %>% filter(lbl==4,final.freq>0)
-
-
+    na.omit()  %>% select(-generation) %>% ungroup()
 
 ################
 ## Figure 7.
 ## Do K-12 mutation tend to decay over time? Not in this picture.
 ## However, selection is already acting on deleterious K-12 mutations.
 ## See Good and Desai (2014) for discussion of deleterious hitchhikers.
-K12.evoexp.data2 <- filter(evoexp.data2,lbl==1)
-Fig7.cluster.plot <- ggplot(K12.evoexp.data2, aes(x=initial.freq,y=final.freq,color=position)) +
+K12.evoexp.data <- filter(evoexp.data,lbl==1)
+## cluster mutations based on initial frequency, final frequency, and genomic position.
+Fig7.cluster.plot <- ggplot(K12.evoexp.data,
+                            aes(x=initial.freq,y=final.freq,color=position)) +
     geom_point(size=0.3) + theme_classic() + geom_abline(slope=1,intercept=0) +
     scale_color_viridis(option="plasma") +
-    facet_wrap( ~ lineage , ncol=4)
+    facet_wrap( ~ lineage , ncol=4) +
+    ylab('Frequency at generation 1200') +
+    xlab('Frequency at generation 1000')
 ggsave("/Users/Rohandinho/Desktop/Fig7.pdf",Fig7.cluster.plot)
 
-dN.K12.evoexp.data2 <- K12.evoexp.data2 %>% filter(mut.annotation=='dN')
-dN.cluster.plot <- ggplot(dN.K12.evoexp.data2, aes(x=initial.freq,y=final.freq,color=position)) +
-    geom_point(size=0.3) + theme_classic() + geom_abline(slope=1,intercept=0) +
-    scale_color_viridis(option="plasma") +
-    facet_wrap( ~ lineage , ncol=4)
-ggsave("/Users/Rohandinho/Desktop/dNcluster.pdf",dN.cluster.plot)
-
-dS.K12.evoexp.data2 <- K12.evoexp.data2 %>% filter(mut.annotation=='dS')
-dS.cluster.plot <- ggplot(dS.K12.evoexp.data2, aes(x=initial.freq,y=final.freq,color=position)) +
-    geom_point(size=0.3) + theme_classic() + geom_abline(slope=1,intercept=0) +
-    scale_color_viridis(option="plasma") +
-    facet_wrap( ~ lineage , ncol=4)
-ggsave("/Users/Rohandinho/Desktop/dScluster.pdf",dS.cluster.plot)
 
 ## How many erased mutations fixed in the STLE and continuation?
-erased.evoexp.mutations <- evoexp.data2 %>% filter(lbl==4)
+erased.evoexp.mutations <- evoexp.data %>% filter(lbl==4)
 initial.erasures <- erased.evoexp.mutations %>% filter(initial.freq == 1)
 final.erasures <- erased.evoexp.mutations %>% filter(final.freq == 1)
 fixed.erasures <- erased.evoexp.mutations %>% filter(final.freq == 1 & initial.freq == 1)
+non.fixed.erasures <- erased.evoexp.mutations %>% filter(final.freq != 1 & initial.freq == 1)
 
-##    Do  K-12/new mutations that reached very high frequency (near fixation)
+##    Do K-12/new mutations that reached very high frequency (near fixation)
 ##    or very low frequency (near extinction) during the STLE continuation reject
 ##    the neutral expectation that P(fixation) = initial.freq? No.
 
-neutrality.test.data <- filter(evoexp.data2,final.freq==1 |final.freq==0) %>%
+neutrality.test.data <- filter(evoexp.data,final.freq==1 |final.freq==0) %>%
     filter(lbl==1 | lbl==3)
 
 neutrality.plot <- ggplot(neutrality.test.data,aes(x=initial.freq)) + geom_density() +
     theme_classic() + facet_wrap(final.freq ~ lbl)
 
-## Compare K-12 to new mutations in STLE continuation.
+##    Compare K-12 to new mutations in STLE continuation.
 ##    Consider a mutation fixed, if it is at frequency 1
 ##    at both 1000 gen and 1200 gen timepoints.
-evoexp.fixations <- evoexp.data2 %>% filter(final.freq==1 & initial.freq==1) %>%
+evoexp.fixations <- evoexp.data %>% filter(final.freq==1 & initial.freq==1) %>%
     filter(lbl==1 | lbl==3)
 
 make.parallel.table <- function(grouped_df,K12=TRUE, dS=TRUE) {
@@ -926,8 +928,8 @@ binom.test(2967,9408,p=7969/23827)
 ## more precisely?
 
 ## Compare to  number of non-fixed differences in evoexp data.
-obs.evoexp.dS <- evoexp.data2 %>% filter(mut.annotation=='dS',lbl=='1')
-obs.evoexp.dN <- evoexp.data2 %>% filter(mut.annotation=='dN',lbl=='1')
+obs.evoexp.dS <- evoexp.data %>% filter(mut.annotation=='dS',lbl=='1')
+obs.evoexp.dN <- evoexp.data %>% filter(mut.annotation=='dN',lbl=='1')
 ## 64037 dS, 19730 dN.
 ## what about those that didn't fix?
 non.fixed.evoexp.dS <- obs.evoexp.dS %>% filter(final.freq != 1 | initial.freq != 1)
@@ -942,111 +944,22 @@ binom.test(2967,9408,p=6726/21551)
 ## prior selection on the K-12 background.
 
 ########
-## Make Figures 7 and 8. Respectively these are
+## Figures 8 and 9. Respectively these are
 ## versions of Figs. 1 and 3, using mutations that fixed in the STLE to estimate
 ## the LCA of each STLE population.
 
-
-LCA.evoexp.data <- filter(evoexp.data2,initial.freq==1 & final.freq == 1)
+LCA.evoexp.data <- filter(evoexp.data,initial.freq==1 & final.freq == 1)
 
 makeLCA_Fig1panel <- Fig1.factory(LCA.evoexp.data,G.score.data,analysis.type='evoexpLCA')
 
 LCApanel1 <- makeLCA_Fig1panel(c("Ara+1","Ara+2","Ara+3", "Ara+4", "Ara+5", "Ara+6"))
-ggsave("/Users/Rohandinho/Desktop/LCA_Fig1A.pdf", LCApanel1,width=9.5,height=8)
+ggsave("/Users/Rohandinho/Desktop/Fig8A.pdf", LCApanel1,width=9.5,height=8)
 
 LCApanel2 <- makeLCA_Fig1panel(c("Ara-1","Ara-2","Ara-3", "Ara-4", "Ara-5", "Ara-6"))
-ggsave("/Users/Rohandinho/Desktop/LCA_Fig1B.pdf", LCApanel2,width=9.5,height=8)
+ggsave("/Users/Rohandinho/Desktop/Fig8B.pdf", LCApanel2,width=9.5,height=8)
 
 scored.LCA.evoexp.data <- score.introgression(LCA.evoexp.data)
 LCA.introgressed.genes <- get.introgressed.genes(scored.LCA.evoexp.data)
 
 LCA_Fig3 <- makeFig3(scored.LCA.evoexp.data,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/LCA_Fig3.pdf",LCA_Fig3)
-
-## A reminder to what the labels are.
-## 0) reference genome state.
-## 1) B/K-12 marker is present that is not in reference genome (yellow)
-## 2) LTEE recipient mutations (red)
-## 3) new mutations (black)
-## 4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
-## 5) deleted markers (marker falls in a deleted region).
-## 6) REL288 specific marker
-## 7) REL291 specific marker
-## 8) REL296 specific marker
-## 9) REL298 specific marker
-
-## first, plot each lineage on a different panel. On each panel, plot both initial and final timepoint.
-## second, plot (final - initial) allele frequency for each lineage.
-for (l in levels(evoexp.data$lineage)) {
-    ## for now filter out 'new' mutations.
-    l.data <- filter(evoexp.data,lineage == l,lbl %in% c(0,1,2,6,7,8,9))
-    l.panel <- ggplot(l.data,aes(x=position,y=frequency)) + geom_line() + facet_grid(generation ~ .) + theme_classic() + ggtitle(l)
-    #ggsave(l.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/",l,"_evolexp.pdf"))
-
-    ## get final - initial allele frequency, and drop generation column as meaningless (b/c took the difference)
-    l.delta.data <- l.data %>% arrange(position,generation) %>% group_by(position) %>%
-        mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
-    delta.panel <- ggplot(l.delta.data,aes(x=position,y=delta.freq)) + geom_line() + theme_classic() + ggtitle(l)
-    ggsave(delta.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/",l,"_delta.pdf"))
-}
-
-###  1) sum data across LTEE lines to look for selection (only look at dN)
-parallel.delta.freq <- evoexp.data %>% filter(mut.annotation=='dN') %>%
-    arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
-    mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation) %>%
-    group_by(position) %>% summarise(sum.delta.freq=sum(delta.freq))
-
-sum.delta.plot <- ggplot(parallel.delta.freq,aes(x=position,y=sum.delta.freq)) + geom_line() + theme_classic() + ggtitle('WHAT?')
-ggsave(sum.delta.plot,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/","sumplot.pdf"))
-
-## now omit Ara+1 and Ara-3 (only look at dN)
-parallel.delta.freq2 <- evoexp.data %>% filter(mut.annotation=='dN') %>%
-    filter(lineage !='Ara+1') %>%
-    filter(lineage!='Ara-3') %>%
-    arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
-    mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation) %>%
-    group_by(position) %>% summarise(sum.delta.freq=sum(delta.freq))
-
-sum.delta.plot2 <- ggplot(parallel.delta.freq2,aes(x=position,y=sum.delta.freq)) + geom_line() + theme_classic() + ggtitle('Change in K-12 allele frequency over time')
-ggsave(sum.delta.plot2,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/","sumplot2.pdf"))
-
-## now, look at mutations where the magnitude of sum delta freq is >=2.
-interesting.delta.pos <- filter(parallel.delta.freq,abs(sum.delta.freq)>=2)
-interesting.delta.muts <- filter(evoexp.data,position %in% interesting.delta.pos$position)
-unique(interesting.delta.muts$gene.annotation)
-
-### 2) look at delta freq in mutations found in the clones: what is the fate of these
-###    lineages? these mutations should be more or less correlated.
-parallel.delta.freq3 <- evoexp.data %>% filter(mut.annotation=='dN') %>%
-    arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
-    mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
-
-## use facet_grid to make a small multiple.
-pop.multiple <- ggplot(data=parallel.delta.freq3,aes(x=position,y=delta.freq)) +
-    geom_line() + theme_classic() + facet_grid(.  ~ lineage)
-ggsave(pop.multiple,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/","delta_small_multiple.pdf"))
-
-## plot each panel separately.
-for (g in levels(labeled.mutations$genome)) {
-    g.data <- filter(labeled.mutations,genome==g)
-    ## This next line doesn't strictly test for equality but probably good enough.
-    clone.lineage <- filter(evoexp.data,lineage %in% g.data$lineage,position %in% g.data$position)
-    clone.delta.freq <- clone.lineage %>%
-        arrange(position,generation) %>% group_by(position) %>%
-        mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
-
-    clone.panel <- ggplot(clone.delta.freq,aes(x=position,y=delta.freq)) + geom_line() + theme_classic() + ggtitle(g)
-    ggsave(clone.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/clone_plots/",g,"_delta.pdf"))
-
-    ## also make a plot of mutations that are in the pop. but not in this clone.
-    clone.complement <- filter(evoexp.data,lineage %in% g.data$lineage,
-                               !position %in% g.data$position)
-
-    complement.delta.freq <- clone.complement %>%
-        arrange(position,generation) %>% group_by(position) %>%
-        mutate(delta.freq=lead(frequency)-frequency) %>% na.omit() %>% select(-generation)
-
-    complement.panel <- ggplot(complement.delta.freq,aes(x=position,y=delta.freq)) + geom_line() + theme_classic() + ggtitle(g)
-    ggsave(complement.panel,file=paste("/Users/Rohandinho/Desktop/evolexp_plots/clone_complement_plots/",g,"_delta.pdf"))
-
-}
+ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",LCA_Fig3)
