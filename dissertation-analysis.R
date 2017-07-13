@@ -10,17 +10,19 @@ library(IRanges)
 library(GenomicRanges)
 library(genbankr)
 
-library(purrr)       # consistent & safe list/vector munging
-library(tidyr)       # consistent data.frame cleaning
-library(ggplot2)     # base plots are for Coursera professors
-library(scales)      # pairs nicely with ggplot2 for plot label formatting
-library(gridExtra)   # a helper for arranging individual ggplot objects
-library(ggthemes)    # has a clean theme for ggplot2
-library(DT)          # prettier data.frame output
-library(data.table)  # faster fread()
-library(dplyr)       # consistent data.frame operations.
-library(dtplyr)      # dplyr works with data.table now.
-library(ggrepel)     # plot labeled scatterplots.
+library(purrr)       ## consistent & safe list/vector munging
+library(tidyr)       ## consistent data.frame cleaning
+library(ggplot2)     ## base plots are for Coursera professors
+library(scales)      ## pairs nicely with ggplot2 for plot label formatting
+library(gridExtra)   ## a helper for arranging individual ggplot objects
+library(ggthemes)    ## has a clean theme for ggplot2
+library(viridis)
+library(DT)          ## prettier data.frame output
+library(data.table)  ## faster fread()
+library(dplyr)       ## consistent data.frame operations.
+library(dtplyr)      ## dplyr works with data.table now.
+library(ggrepel)     ## plot labeled scatterplots.
+library(splines)     ## for Figure 3.
 library(zoo)
 
 ## A reminder to what the labels are.
@@ -58,12 +60,12 @@ pop.clone.file <- file.path("../doc/Populations-and-Clones.csv")
 pop.and.clone.metadata <- read.csv(pop.clone.file)
 
 ## For each dataset, add rotated genome coordinates so that oriC is at the center of the chromosome in plots.
-hand.annotation <- tbl_df(read.csv("../results/donor_hand_annotation.csv")) %>%
+hand.annotation <- read.csv("../results/donor_hand_annotation.csv") %>%
     mutate(rotated.position=rotate.chr(position))
 
 ##annotate auxotrophs and Hfr oriTs on Fig2 type plots.
-auxotrophs <- filter(hand.annotation,annotation!="Hfr"&annotation!="oriC")
-hfrs <- filter(hand.annotation,annotation=="Hfr")
+auxotrophs <- filter(hand.annotation,annotation!="oriT"&annotation!="oriC")
+hfrs <- filter(hand.annotation,annotation=="oriT")
 
 G.score.data <- tbl_df(read.csv("../results/036806-3.csv")) %>%
     mutate(rotated.Start.position=rotate.chr(Start.position))
@@ -87,141 +89,127 @@ evoexp.labeled.mutations <- tbl_df(read.csv("../results/evolution-experiment/evo
 K12.diff.data <- tbl_df(read.csv("../results/K-12-differences.csv")) %>%
     mutate(rotated.position=rotate.chr(position))
 
-##################################################################################
-## Make Figures and Tables.
-
 ######
 ## First, separate into odd or even clones, and
 ## This is used in a lot of the following code (Fig S2, Fig 2, Fig 4 or something like that.)
 odd.genomes <- filter(labeled.mutations, odd==TRUE)
 even.genomes <- filter(labeled.mutations, odd==FALSE)
 
-############
+##################################################################################
+## Make Figures and Tables.
+
 ## Figure S1. Density of differences between K-12 and REL606.
 
 oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
 FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=400) + theme_classic() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
 ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1)
 
-############################################################################################
-## Generate functions to make Figure 1, as well as related figures for the
-## LCA for STLE continuation experiment analysis.
-## The idea is to write a closure that returns specific versions of the 'Fig1 function'.
 
-Fig1.factory <- function(mut.df, G.score.data, analysis.type='Fig1') {
+#############################
+## Table 2: Probable beneficial mutations found in STLE recipients.
 
-    ## lvector is a vector of the factor levels to plot on the panel.
-    my.Fig1panel.function <- function(lvector) {
-        ## REL606 markers are negative space on the plot.
-        ## also, reverse levels to get Ara+1 genomes on top of plot.
-        ## ylim from 0 to 70. plot 6 genomes/lineages on 10,20,30,40,50. so map genome/lineage to a center position.
+## Calculation that 32 genes that are in Figure 1 and in Table 2.
+## Take top 57 G-scoring genes with 2 or more dN in non-mutators (Tenaillon et al. 2016).
+top.G.score.genes <- filter(G.score.data,Observed.nonsynonymous.mutation>1)
+top.hits <- filter(labeled.mutations, gene.annotation %in% top.G.score.genes$Gene.name)
+recipient.top.hits <- filter(labeled.mutations, gene.annotation %in% top.G.score.genes$Gene.name) %>%
+        filter(lbl=='2' | lbl=='4')
+genes.to.label <- filter(top.G.score.genes,Gene.name %in% recipient.top.hits$gene.annotation)
+## gene.to.label contains 32 genes.
 
-        no.B.genomes <- filter(mut.df,lbl!='0')
+Table2.df <- mutate(genes.to.label,Gene = Gene.name) %>%
+    select(Gene,Start.position,Coding.length,G.score)
 
-        if (analysis.type == 'Fig1') {
-            no.B.genomes <- no.B.genomes %>%
-                mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
-                mutate(genome=factor(genome,levels=rev(levels(genome)))) %>%
-                filter(lineage %in% lvector) %>%
-                mutate(y.center=70-match(genome,unique(genome))*10,
-                       x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
+write.csv(file="~/Desktop/Table2.csv",Table2.df)
 
-        } else if (analysis.type == 'evoexpLCA') {
-            no.B.genomes <- no.B.genomes %>%
-                mutate(lineage=factor(lineage,levels=rev(levels(lineage)))) %>%
-                filter(lineage %in% lvector) %>%
-                mutate(y.center=70-match(lineage,unique(lineage))*10,
-                       x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
-        }
+#####################################################################################
+## Make Figure 1 and Figure 8 (LCA for STLE continuation experiment analysis).
 
-        no.B.genomes <- no.B.genomes %>%
-            ## turn lbls for donor-specific markers into K-12 lbls.
-            mutate(lbl = replace(lbl,lbl %in% c('6','7','8','9'),'1')) %>%
-            ## then turn into a factor.
-            mutate(lbl=factor(lbl))
+Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
+    ## REL606 markers are negative space on the plot.
+    ## also, reverse levels to get Ara+1 genomes on top of plot.
+    ## ylim from 0 to 130. plot 12 genomes/lineages on 10,20,30,40,50,60,70,80,90,110,120. so map genome/lineage to a center position.
 
-        ## label the top 54 G-scoring genes with symbols.
-        ## below this threshold, very short genes with 1 dN have a high G-score.
-        top.G.score.genes <- filter(G.score.data,G.score>8.9)
+    ## for max ylim.
+    y.pad <- 10
+    y.max <- 13 * y.pad ## 130
 
-        ## label these mutations as points in the plot.
-        LTEE.top.hits <- filter(no.B.genomes, gene.annotation %in% top.G.score.genes$Gene.name) %>%
-            ## NOTE: do I need this filter or not?
-            filter(lbl=='2' | lbl=='3' | lbl=='4') %>%
-            mutate(y.center=70-match(genome,unique(genome))*10,
-                   x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
+    no.B.genomes <- filter(mut.df,lbl!='0') %>%
+        mutate(lineage=factor(lineage,
+                              levels=c('Ara+1','Ara+2','Ara+3','Ara+4','Ara+5','Ara+6','Ara-1','Ara-2','Ara-3','Ara-4','Ara-5','Ara-6'))) %>%
+        arrange(lineage,position) %>%
+        mutate(y.center=y.max-match(lineage,levels(lineage))*y.pad,
+               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3) %>%
+        ## turn lbls for donor-specific markers into K-12 lbls.
+        mutate(lbl = replace(lbl,lbl %in% c('6','7','8','9'),'1')) %>%
+        ## then turn into a factor.
+        mutate(lbl=factor(lbl))
 
-        ## reorder LTEE.top.hits$mut.annotation factor levels for nice plotting.
-        LTEE.top.hits$mut.annotation <- factor(LTEE.top.hits$mut.annotation, levels = c("dN", "dS", "indel", "IS-insertion", "base-substitution", "non-coding", "non-point"))
+    ## label the top 32 beneficial LTEE genes with mutations in the recipients with symbols.
+    top.hit.labels <- filter(no.B.genomes, gene.annotation %in% genes.to.label$Gene.name) %>%
+        filter(lbl %in% c(2,3,4)) %>%
+        mutate(y.center=y.max-match(lineage,unique(lineage))*y.pad,
+               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
 
+    ## reorder top.hit.labels$mut.annotation factor levels for nice plotting.
+    top.hit.labels$mut.annotation <- factor(top.hit.labels$mut.annotation, levels = c("dN", "dS", "indel", "IS-insertion", "base-substitution", "non-coding", "non-point"))
 
-        ## draw labels on the plot for high G-score mutations.
-        genes.to.label <- filter(top.G.score.genes,Gene.name %in% top.hits$gene.annotation)
+    Fig1.xlab <- expression(paste("Distance from ",italic("oriC")))
+    ## all donor mutations should be labeled as yellow.
+    panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
+        geom_segment(size=0.05) +
+        theme_classic() +
+        xlab(Fig1.xlab) +
+        ylim(5,y.max-5) +
+        geom_point(data=top.hit.labels,aes(x=rotated.position,
+                                          y=y.center,
+                                          color=lbl,
+                                          shape=mut.annotation),
+                   width=0,
+                   height=1) +
+        ## set the symbols this way:
+        ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
+        scale_shape_manual(values = c(1,0,2,4),name="symbol") +
+        theme(legend.position = "top") +
+        geom_label_repel(data=filter(top.hit.labels,lbl %in% c(3,4)),
+                         aes(x=rotated.position,
+                             y=y.center,
+                             fill=lbl,
+                             label=gene.annotation),
+                         fontface='italic',
+                         color='white',
+                         box.padding = unit(0.35, "lines"),
+                         point.padding = unit(0.5, "lines"),
+                         segment.color = 'grey50',
+                         size=2.5) +
+        scale_fill_manual(values=c('black','#d7191c'),
+                          labels=c("new","erased")) +
+        guides(fill=FALSE) +
+        scale_colour_manual(values=c('#ffffbf', '#abd9e9', 'black','#d7191c','#f1b6da'),
+                            name='color',
+                            labels=c("K-12","LTEE","new","replaced","deleted")) +
+        scale_y_continuous(breaks=c(10,20,30,40,50,60,70,80,90,100,110,120),labels=rev(levels(no.B.genomes$lineage)))
 
-        panel.labels <- select(LTEE.top.hits,lineage,genome,rotated.position,gene.annotation,y.center) %>%
-            group_by(lineage) %>% mutate(ypos=mean(y.center))
-
-        Fig1.xlab <- expression(paste("Distance from ",italic("oriC")))
-        ## all donor mutations should be labeled as yellow.
-        panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
-            geom_segment(size=0.05) +
-            theme_classic() +
-            xlab(Fig1.xlab) +
-            ylim(5,70) +
-            geom_jitter(data=LTEE.top.hits,aes(x=rotated.position,
-                                               y=y.center,
-                                               color=lbl,
-                                               shape=mut.annotation),
-                        width=0,
-                        height=1) +
-            ## set the symbols this way:
-            ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
-            scale_shape_manual(values = c(1,0,2,4),name="symbol") +
-            theme(legend.position = "top") +
-           ##geom_segment(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')), aes(x=rotated.Start.position,xend=rotated.Start.position,y=1,yend=65),size=0.1,inherit.aes=FALSE) +
-            ## label genes that are in the text at the top.
-            ##geom_text(data=filter(genes.to.label, Gene.name %in% c('ybaL', 'fabF', 'topA', 'pykF', 'mreC/B', 'malT', 'spoT', 'hslU', 'iclR', 'nadR')),aes(label=Gene.name,x=rotated.Start.position, y=67),size=3,angle=45,inherit.aes=FALSE) +
-            geom_text_repel(data=filter(LTEE.top.hits,lbl %in% c(3,4)),aes(x=rotated.position,
-                                               y=y.center,label=gene.annotation),fontface='italic',size=2.5) +
-            scale_colour_manual(values=c('#ffffbf', '#abd9e9', 'black','#d7191c','#f1b6da'),
-                                name='color',
-                                labels=c("K-12","LTEE","new","erased","deleted"))
-
-
-        if (analysis.type == 'Fig1') {
-            panel <- panel +
-                ylab("Clone") +
-                scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$genome)))
-        } else if (analysis.type == 'evoexpLCA') {
-            panel <- panel +
-                ylab("Inferred LCA of Population") +
-                scale_y_continuous(breaks=c(10,20,30,40,50,60),labels=rev(unique(no.B.genomes$lineage)))
-        }
-        return(panel)
+    if (analysis.type == 'Fig1') {
+        panel <- panel + ylab("Odd-numbered Clone")
+    } else if (analysis.type == 'FigS2') {
+        panel <- panel + ylab("Even-numbered Clone")
+    } else if (analysis.type == 'evoexpLCA') {
+        panel <- panel + ylab("Inferred LCA of Population")
     }
-
-    return(my.Fig1panel.function)
+    return(panel)
 }
 
-############################################################################################
+#########################
 ## make Figure 1.
 ## break Figure 1 into 4 panels, three lineages per page (both clones on a page).
 
-make_Fig1_panel <- Fig1.factory(odd.genomes, G.score.data, analysis.type='Fig1')
+Fig1 <- Fig1.function(odd.genomes, genes.to.label, analysis.type='Fig1')
+ggsave("/Users/Rohandinho/Desktop/Fig1.pdf", Fig1,width=8,height=10)
 
-panelA <- make_Fig1_panel(c("Ara+1","Ara+2","Ara+3","Ara+4","Ara+5","Ara+6"))
-ggsave("/Users/Rohandinho/Desktop/Fig1A.pdf", panelA,width=9.5,height=8)
+FigS2 <- Fig1.function(even.genomes, genes.to.label, analysis.type='FigS2')
+ggsave("/Users/Rohandinho/Desktop/FigS2.pdf", FigS2,width=8,height=10)
 
-panelB <- make_Fig1_panel(c("Ara-1","Ara-2","Ara-3","Ara-4","Ara-5","Ara-6"))
-ggsave("/Users/Rohandinho/Desktop/Fig1B.pdf", panelB,width=9.5,height=8)
-
-make_FigS1_panel <- Fig1.factory(even.genomes, G.score.data, analysis.type='Fig1')
-
-panelS1A <- make_FigS1_panel(c("Ara+1","Ara+2","Ara+3","Ara+4","Ara+5","Ara+6"))
-ggsave("/Users/Rohandinho/Desktop/FigS1A.pdf", panelS1A,width=9.5,height=8)
-
-panelS1B <- make_FigS1_panel(c("Ara-1","Ara-2","Ara-3","Ara-4","Ara-5","Ara-6"))
-ggsave("/Users/Rohandinho/Desktop/FigS1B.pdf", panelS1B,width=9.5,height=8)
 
 ##############################################################################
 ############## Fig. 2: Number of donor specific mutations in each clone.
@@ -257,18 +245,6 @@ FigS3 <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.positio
 
 ggsave("/Users/Rohandinho/Desktop/FigS3.pdf",FigS3,width=11,height=8)
 
-#############################
-## Probable beneficial mutations.
-
-## Calculation that 31 genes that are in Figure 1 and in Table 2.
-## the top 54 G-scoring genes: below this threshold, very short genes with 1 dN have a high G-score.
-top.G.score.genes <- filter(G.score.data,G.score>8.9)
-top.hits <- filter(labeled.mutations, gene.annotation %in% top.G.score.genes$Gene.name)
-LTEE.top.hits <- filter(labeled.mutations, gene.annotation %in% top.G.score.genes$Gene.name) %>%
-        filter(lbl=='2' | lbl=='4')
-genes.to.label <- filter(top.G.score.genes,Gene.name %in% LTEE.top.hits$gene.annotation)
-## gene.to.label contains 31 genes.
-
 #############################################################
 ## Figure S2 and Figure 3.
 
@@ -300,16 +276,61 @@ makeFig3 <- function(scores, auxotrophs, hfrs) {
 
     oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
 
-    Fig3 <- ggplot(scores, aes(x=rotated.position,y=introgression.score)) + geom_line(size=0.05) + theme_classic() +
-        xlab(oriC.xlab) + ylab("Introgression Score") +
+    Fig3 <- ggplot(scores, aes(x=rotated.position,y=introgression.score)) +
+        geom_line(size=0.05) +
+        ## fit a natural cubic spline with 100 degrees of freedom.
+        geom_smooth(method='lm', formula = y ~ ns(x,100)) +
+        theme_classic() +
+        xlab(oriC.xlab) +
+        ylab("Introgression Score") +
         ## add auxotroph lines
-        geom_vline(data=auxotrophs,aes(xintercept=rotated.position),size=0.05,linetype="dashed") +
-        geom_text_repel(data=auxotrophs,aes(x=rotated.position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
+        geom_vline(data=auxotrophs,
+                   aes(xintercept=rotated.position,color=Donor.strain),
+                   size=0.5,
+                   linetype="dashed") +
+        geom_label_repel(data=auxotrophs,
+                         aes(x=rotated.position,
+                             y=8.2,
+                             label=annotation,
+                             fill=Donor.strain,
+                             fontface="italic"),
+                         inherit.aes=FALSE,
+                         box.padding = unit(0.35, "lines"),
+                         point.padding = unit(0.5, "lines"),
+                         segment.color = 'grey50',
+                         color='white',
+                         size=2.5) +
         ## add annotation of Hfr and oriC on chromosome.
-        geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
+        geom_label_repel(data=hfrs,
+                         aes(x=rotated.position,
+                             y=-0.3,
+                             label=Hfr.orientation,
+                             fill=Donor.strain),
+                         inherit.aes=FALSE,
+                         size=2.5,
+                         box.padding = unit(0.35, "lines"),
+                         point.padding = unit(0.5, "lines"),
+                         segment.color = 'grey50',
+                         color='white',
+                         nudge_y=-0.3)
 }
 
 odd.introgression.scores <- score.introgression(odd.genomes)
+
+## Figure 3.
+## Visual comparisons of parallel recombination across lineages
+## with the G-score of mutations over the genome, and with the occurrence of
+## new mutations over the genome.
+## This is only made with odd genomes at the moment.
+
+Fig3 <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
+ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3,height=2.5,width=6)
+## NOTE: The delta does not print properly but can fix in Illustrator.
+
+
+test <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
+ggsave("/Users/Rohandinho/Desktop/test.pdf",test,height=2.5,width=6)
+
 
 ## which genes get introgressed the most? is this a sign of positive selection?
 odd.introgressed.genes <- get.introgressed.genes(odd.introgression.scores)
@@ -352,15 +373,6 @@ FigS2 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgressi
     theme_classic()
 
 ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2,width=11,height=8)
-
-## Figure 3.
-## Visual comparisons of parallel recombination across lineages
-## with the G-score of mutations over the genome, and with the occurrence of
-## new mutations over the genome.
-## This is only made with odd genomes at the moment.
-
-Fig3 <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3)
 
 
 ####################################################################################################
@@ -832,7 +844,7 @@ evoexp.data <- evoexp.labeled.mutations %>%
     arrange(lineage,position,generation) %>% group_by(lineage,position) %>%
     mutate(initial.freq = frequency) %>% mutate(final.freq = lead(frequency)) %>%
     mutate(delta.freq=lead(frequency)-frequency) %>%
-    na.omit()  %>% select(-generation) %>% ungroup()
+    na.omit()  %>% select(-generation,-genome) %>% ungroup()
 
 ################
 ## Figure 7.
@@ -950,16 +962,51 @@ binom.test(2967,9408,p=6726/21551)
 
 LCA.evoexp.data <- filter(evoexp.data,initial.freq==1 & final.freq == 1)
 
-makeLCA_Fig1panel <- Fig1.factory(LCA.evoexp.data,G.score.data,analysis.type='evoexpLCA')
+## take intersection of even and odd clones.
 
-LCApanel1 <- makeLCA_Fig1panel(c("Ara+1","Ara+2","Ara+3", "Ara+4", "Ara+5", "Ara+6"))
-ggsave("/Users/Rohandinho/Desktop/Fig8A.pdf", LCApanel1,width=9.5,height=8)
+clone.intersection <- intersect(select(odd.genomes,-genome,-odd,-frequency),select(even.genomes,-genome,-odd,-frequency))
+## to prevent different factor levels to get in the way of comparisons.
+clone.intersection[] <- lapply(clone.intersection, as.character)
 
-LCApanel2 <- makeLCA_Fig1panel(c("Ara-1","Ara-2","Ara-3", "Ara-4", "Ara-5", "Ara-6"))
-ggsave("/Users/Rohandinho/Desktop/Fig8B.pdf", LCApanel2,width=9.5,height=8)
+## now, calculate Jaccard index with LCA.evoexp.data to see how good
+    ## the LCA.evoexp.data inference is.
 
-scored.LCA.evoexp.data <- score.introgression(LCA.evoexp.data)
-LCA.introgressed.genes <- get.introgressed.genes(scored.LCA.evoexp.data)
+evoexp.precomp <- select(LCA.evoexp.data,-frequency,-initial.freq,-final.freq,-delta.freq)
+## to prevent different factor levels to get in the way of comparisons.
+evoexp.precomp[] <- lapply(evoexp.precomp,as.character)
 
-LCA_Fig3 <- makeFig3(scored.LCA.evoexp.data,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",LCA_Fig3)
+evoexp.clone.intersection <- intersect(clone.intersection,evoexp.precomp)
+evoexp.clone.union <- union(clone.intersection,evoexp.precomp)
+
+my.jaccard.index <- nrow(evoexp.clone.intersection)/nrow(evoexp.clone.union)
+## 0.82. OK but not great.
+
+## convert data frame to datatypes expected by Fig1.function.
+inferred.LCA <- mutate(evoexp.clone.intersection,
+                       lineage=factor(lineage),
+                       mut.type=factor(mut.type),
+                       reference=factor(reference),
+                       position=as.integer(position),
+                       mutation=factor(mutation),
+                       mut.annotation=factor(mut.annotation),
+                       gene.annotation=factor(gene.annotation),
+                       lbl=factor(lbl),
+                       rotated.position=as.double(rotated.position))
+
+## For the LCA picture, only plot mutations in A & B (found in both clones and initial.freq=1 & final.freq=1)
+
+Fig8 <- Fig1.function(inferred.LCA,genes.to.label,analysis.type='evoexpLCA')
+ggsave("/Users/Rohandinho/Desktop/Fig8.pdf", Fig8,width=8,height=10)
+
+##scored.LCA.evoexp.data <- score.introgression(LCA.evoexp.data)
+##LCA.introgressed.genes <- get.introgressed.genes(scored.LCA.evoexp.data)
+
+##LCA_Fig3 <- makeFig3(scored.LCA.evoexp.data,auxotrophs,hfrs)
+##ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",LCA_Fig3)
+
+
+## find mutations in the LCA.evoexp.data that
+## 1) do not intersect with the odd clones
+##    do not intersect with the even clones
+##    do not intersect with the odd AND even clones
+##    do not intersect with the odd OR even clones
