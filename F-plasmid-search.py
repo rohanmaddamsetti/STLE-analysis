@@ -21,8 +21,8 @@ from os.path import exists, join, basename, isdir
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-from scipy.stats import ks_2samp, mannwhitneyu
+##import numpy as np
+##from scipy.stats import ks_2samp, mannwhitneyu
 
 def make_STLE_clone_coverage_df():
     '''
@@ -32,6 +32,7 @@ def make_STLE_clone_coverage_df():
 
     projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
     stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
+
     lineage_dict = {'REL288':'Donor', 'REL291':'Donor','REL296':'Donor','REL298':'Donor',
                     'REL2537':'Ara+1', 'REL2538':'Ara+2',
                     'REL2539':'Ara+3', 'REL2540':'Ara+4',
@@ -53,6 +54,7 @@ def make_STLE_clone_coverage_df():
                     'RM3-130-21':'Ara-5', 'RM3-130-22':'Ara-5',
                     'RM3-130-23':'Ara-6', 'RM3-130-24':'Ara-6' }
 
+    clone_col = []
     strain_type_col = []
     lineage_col = []
     unique_cov_col = []
@@ -78,17 +80,21 @@ def make_STLE_clone_coverage_df():
                     line_data = line.split()
                     unique_coverage = int(line_data[0]) + int(line_data[1])
                     position = int(line_data[-1])
+                    ## skip rows with coverage 0.
+                    ##if unique_coverage == 0:
+                    ##    continue
                     ## Now add row data into each column list.
                     strain_type_col.append(strain_type)
                     lineage_col.append(lineage)
                     unique_cov_col.append(unique_coverage)
                     position_col.append(position)
+                    clone_col.append(l2)
 
-    df = pd.DataFrame( { 'Strain Type' : strain_type_col,
-                         'Lineage' : lineage_col,
-                         'Unique Coverage' :  unique_cov_col,
-                         'Position' : position_col })
-
+    df = pd.DataFrame( { 'Clone':clone_col,
+        'Strain Type' : strain_type_col,
+        'Lineage' : lineage_col,
+        'Coverage' :  unique_cov_col,
+        'Position' : position_col })
     return df
 
 def make_evolexp_coverage_df():
@@ -109,7 +115,7 @@ def make_evolexp_coverage_df():
         'RM3-149-12':'Ara-6',
         'RM3-153-1':'Ara+1',
         'RM3-153-2':'Ara+2',
-        'RM3-153-3':'Ara+3',
+         'RM3-153-3':'Ara+3',
         'RM3-153-4':'Ara+4',
         'RM3-153-5':'Ara+5',
         'RM3-153-6':'Ara+6',
@@ -219,6 +225,25 @@ def make_coverage_small_multiple(df,evolexp=False):
         g.set(xticklabels=[])
         plt.savefig("/Users/Rohandinho/Desktop/FigS4.pdf", format='PDF')
 
+def make_coverage_lineplot(df,evolexp=False):
+    '''
+    make Figure 6 of clone coverage over F-plasmid reference.
+    '''
+    sns.set(style="ticks")
+    plt.figure()
+
+    if evolexp:
+        pass
+    else:
+        sns.tsplot(data=df, time="Position", #unit="Clone",
+           condition="Clone", value="Coverage")
+        ##g.map_dataframe(plt.plot, "Position", "Unique Coverage")
+        ## TODO: fix the x-axis. try to use scientific notation on x-axis.
+        ##g.set(xaxis.get_major_formatter().set_powerlimits((0, 1))
+        ##g.set(xticklabels=[])
+        plt.savefig("/Users/Rohandinho/Desktop/test.pdf", format='PDF')
+
+
 def make_fig10():
     '''
     Make a pandas dataframe containing coverage information
@@ -300,21 +325,25 @@ def make_fig10():
 
 def main():
 
+    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
+    stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
+    outdir = join(projdir,"results/F-plasmid-search")
+
     ## Make Figure 6 and Figure S4.
-    ##df = make_STLE_clone_coverage_df()
+    df = make_STLE_clone_coverage_df()
     ##make_violin_plot(df)
     ##make_coverage_small_multiple(df)
+    #make_coverage_lineplot(df)
 
     ## Make Figure S5.
     ##df2 = make_evolexp_coverage_df()
     ##make_coverage_small_multiple(df2,evolexp=True)
 
     ## Make Figure 10.
-    make_fig10()
+    #make_fig10()
 
-    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-    stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
-    outdir = join(projdir,"results/F-plasmid-search")
+    ## write clone coverage to csv.
+    df.to_csv(join(projdir,"results/STLE-clone-F-coverage.csv"))
 
 main()
 

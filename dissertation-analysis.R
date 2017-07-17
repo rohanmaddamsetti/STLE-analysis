@@ -23,6 +23,7 @@ library(dplyr)       ## consistent data.frame operations.
 library(dtplyr)      ## dplyr works with data.table now.
 library(ggrepel)     ## plot labeled scatterplots.
 library(splines)     ## for Figure 3.
+library(cowplot)     ## for Figure 6.
 library(zoo)
 
 ## A reminder to what the labels are.
@@ -88,6 +89,11 @@ evoexp.labeled.mutations <- tbl_df(read.csv("../results/evolution-experiment/evo
 ## differences between K-12 and REL606.
 K12.diff.data <- tbl_df(read.csv("../results/K-12-differences.csv")) %>%
     mutate(rotated.position=rotate.chr(position))
+
+## get F-plasmid coverage data for clones and for evolution experiment.
+STLE.clone.F.coverage <- tbl_df(read.csv("../results/STLE-clone-F-coverage.csv"))
+
+STLE.evoexp.F.coverage <- tbl_df(read.csv("../results/STLE-evoexp-F-coverage.csv"))
 
 ######
 ## First, separate into odd or even clones, and
@@ -780,7 +786,8 @@ Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins
     xlab(expression("log"[10]*"(Segment Length)")) +
     ylab("Count") +
     theme(text=element_text(family="serif")) +
-    theme(strip.background=element_blank())
+    theme(strip.background=element_blank()) +
+    theme(panel.grid.minor.x=element_line(color='grey90',linetype="dashed"))
 
 ggsave("/Users/Rohandinho/Desktop/Fig5.pdf",Fig5,width=4,height=7)
 
@@ -818,6 +825,41 @@ recomb.mut.ratio.table <- filter(labeled.mutations,mut.annotation=='dS') %>%
     mutate(event.r.over.m.ratio=recombination.events/tot.new.dS)
 
 write.csv(recomb.mut.ratio.table,"../results/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
+
+####################################################################################################
+## Figure 6. Ara-3 clones have the F-plasmid.
+
+Fig6.data <- STLE.clone.F.coverage %>% filter(Strain.Type != 'Recipient')
+
+Fig6A.data <- Fig6.data %>% filter (Lineage == 'Ara-3')
+Fig6B.data <- Fig6.data %>% filter (Lineage == 'Donor')
+Fig6C.data <- Fig6.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
+
+## plot the Ara-3 clone F coverage in shades of orange.
+Fig6A <- ggplot(data=Fig6A.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
+    geom_line() +
+    theme_tufte() +
+    guides(color=FALSE) +
+    scale_color_manual(values=c('#feedde','#fdbe85','#fd8d3c','#d94701'))
+
+## keep default colors so that donor colors match with other figures.
+Fig6B <- ggplot(data=Fig6B.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
+    geom_line() +
+    theme_tufte() +
+    guides(color=FALSE)
+
+## plot the rest of the recombinant clones in shades of grey.
+Fig6C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Clone)) +
+    geom_line() +
+    theme_tufte() +
+    guides(color=FALSE) +
+    scale_colour_grey()
+
+## arrange panes with cowplot.
+Fig6 <- plot_grid(Fig6A, Fig6B, Fig6C, labels = c("A", "B", "C"), ncol = 1)
+save_plot("~/Desktop/Fig6.pdf", Fig6, ncol = 1, nrow = 3, base_aspect_ratio = 3)
+
+
 
 ####################################################################################################
 ## Analyze evolution experiment results.
@@ -975,7 +1017,7 @@ binom.test(2967,9408,p=6726/21551)
 ## dynamics being driven by hidden driver mutations. AND dN have already been pre-screened by
 ## prior selection on the K-12 background.
 
-########
+################
 ## Figures 8 and 9. Respectively these are
 ## versions of Figs. 1 and 3, using mutations that fixed in the STLE to estimate
 ## the LCA of each STLE population.
@@ -1025,8 +1067,7 @@ Fig9 <- makeFig3(scored.LCA,auxotrophs,hfrs)
 ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",Fig9,height=2.5,width=6)
 ## NOTE: fix delta symbol in Illustrator.
 
-## find mutations in the LCA.evoexp.data that
-## 1) do not intersect with the odd clones
-##    do not intersect with the even clones
-##    do not intersect with the odd AND even clones
-##    do not intersect with the odd OR even clones
+########################################
+## Figure S5:
+
+## Figure 10.
