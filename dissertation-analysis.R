@@ -101,8 +101,8 @@ even.genomes <- filter(labeled.mutations, odd==FALSE)
 ## Figure S1. Density of differences between K-12 and REL606.
 
 oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
-FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=400) + theme_classic() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
-ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1)
+FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=400) + theme_tufte() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
+ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1,height=3,width=4)
 
 
 #############################
@@ -158,7 +158,7 @@ Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
     ## all donor mutations should be labeled as yellow.
     panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
         geom_segment(size=0.05) +
-        theme_classic() +
+        theme_tufte() +
         xlab(Fig1.xlab) +
         ylim(5,y.max-5) +
         geom_point(data=top.hit.labels,aes(x=rotated.position,
@@ -224,7 +224,7 @@ donor.mutations <- filter(labeled.mutations,lbl == 6 | lbl==7 | lbl == 8 | lbl =
 
 donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summarise(count=n())
 
-Fig2 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_classic() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1))
+Fig2 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif"))
 ggsave("/Users/Rohandinho/Desktop/Fig2.pdf",Fig2,width=11,height=8)
 
 ############# Fig. S3: location of donor specific mutations on the chromosome.
@@ -232,9 +232,8 @@ ggsave("/Users/Rohandinho/Desktop/Fig2.pdf",Fig2,width=11,height=8)
 only.donor.mutations <- donor.mutations %>%
     mutate(y.center=35-match(lbl,sort(unique(lbl)))*10,y1=y.center-3,y2=y.center+3)
 
-
 FigS3 <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.position,y=y1,yend=y2,colour=lbl)) +
-    geom_segment(size=0.05) + theme_classic() +
+    geom_segment(size=0.05) + theme_tufte() +
     scale_colour_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) +
     xlab(oriC.xlab) +
     ## add auxotroph lines
@@ -280,39 +279,40 @@ makeFig3 <- function(scores, auxotrophs, hfrs) {
         geom_line(size=0.05) +
         ## fit a natural cubic spline with 100 degrees of freedom.
         geom_smooth(method='lm', formula = y ~ ns(x,100)) +
-        theme_classic() +
+        theme_tufte() +
         xlab(oriC.xlab) +
         ylab("Introgression Score") +
+        ylim(-1,11.5) +
         ## add auxotroph lines
         geom_vline(data=auxotrophs,
-                   aes(xintercept=rotated.position,color=Donor.strain),
+                   aes(xintercept=rotated.position,
+                       color=Donor.strain),
                    size=0.5,
                    linetype="dashed") +
         geom_label_repel(data=auxotrophs,
                          aes(x=rotated.position,
-                             y=8.2,
+                             y=10,
                              label=annotation,
                              fill=Donor.strain,
                              fontface="italic"),
                          inherit.aes=FALSE,
                          box.padding = unit(0.35, "lines"),
-                         point.padding = unit(0.5, "lines"),
+                         point.padding = unit(0.25, "lines"),
+                         arrow = arrow(length = unit(0.01, 'npc')),
                          segment.color = 'grey50',
                          color='white',
                          size=2.5) +
         ## add annotation of Hfr and oriC on chromosome.
         geom_label_repel(data=hfrs,
-                         aes(x=rotated.position,
-                             y=-0.3,
-                             label=Hfr.orientation,
-                             fill=Donor.strain),
-                         inherit.aes=FALSE,
-                         size=2.5,
-                         box.padding = unit(0.35, "lines"),
-                         point.padding = unit(0.5, "lines"),
-                         segment.color = 'grey50',
-                         color='white',
-                         nudge_y=-0.3)
+                         aes(x = rotated.position,
+                             y = -0.65,
+                             label = Hfr.orientation,
+                             fill = Donor.strain),
+                         inherit.aes = FALSE,
+                         size = 2.5,
+                         point.padding = unit(0, "lines"),
+                         color = 'white') +
+        guides(fill=FALSE,color=FALSE)
 }
 
 odd.introgression.scores <- score.introgression(odd.genomes)
@@ -326,11 +326,6 @@ odd.introgression.scores <- score.introgression(odd.genomes)
 Fig3 <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
 ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3,height=2.5,width=6)
 ## NOTE: The delta does not print properly but can fix in Illustrator.
-
-
-test <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/test.pdf",test,height=2.5,width=6)
-
 
 ## which genes get introgressed the most? is this a sign of positive selection?
 odd.introgressed.genes <- get.introgressed.genes(odd.introgression.scores)
@@ -370,7 +365,7 @@ confint(introgression.divergence.model)
 
 FigS2 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
     geom_jitter() + ylab("Median Introgression") + xlab("Divergence") +
-    theme_classic()
+    theme_tufte()
 
 ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2,width=11,height=8)
 
@@ -572,17 +567,16 @@ fixed.K12.seg.parallelism <- annotated.fixed.K12.segments %>% group_by(gene,locu
 clone.K12.seg.parallelism <- odd.annotated.clone.K12.segments %>% group_by(gene,locus_tag) %>% summarise(count=n()) %>% arrange(desc(count),locus_tag)
 
 ## plot distribution of K-12 specific segment lengths.
-fixed.K12.segment.plot <- ggplot(annotated.fixed.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Population ~ .) + theme_classic()
+fixed.K12.segment.plot <- ggplot(annotated.fixed.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Population ~ .) + theme_tufte()
 ggsave("/Users/Rohandinho/Desktop/fixed-K12-segments.pdf",fixed.K12.segment.plot)
-clone.K12.segment.plot <- ggplot(annotated.clone.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Name ~ .) + theme_classic()
+clone.K12.segment.plot <- ggplot(annotated.clone.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Name ~ .) + theme_tufte()
 ggsave("/Users/Rohandinho/Desktop/clone-K12-segments.pdf",clone.K12.segment.plot)
 
 #######################################################
 ## Map recombination breakpoints. Currently breakpoints occur ON
 ## mutations, NOT between mutations.
-## Make Figure 5 (chunk length distributions) and do two statistical tests:
-## Distance between new mutations and breakpoints (are breakpoints mutagenic?)
-## recombination hot and cold spots
+## Main goal of this analysis is to make Figure 5,
+## a plot of chunk length distributions.
 
 ## This function maps a vector of labels to a vector of transitions between
 ## chunks from K-12 and chunks from LTEE recipient.
@@ -770,20 +764,25 @@ donor.and.deleted.markers <- full_join(all.chunk.summary,deleted.marker.summary)
 ## write table to file for Rich to look at.
 write.csv(donor.and.deleted.markers,"/Users/Rohandinho/Desktop/percent-greens-in-donor.csv")
 
-#########################################################################################################
+##############################
+## Make Figure 5 (chunk length distributions)
 
 all.odd.chunks <- full_join(odd.K12.chunks,odd.LTEE.chunks) %>%
+    ## change segment.type to Recipient or Donor
+    mutate(segment.type = ifelse(segment.type == 'K-12','K-12 Donor','Recipient')) %>%
     ## reorder factor for plotting.
     ungroup() %>%
     mutate(lineage=factor(lineage,levels=levels(lineage)[c(7:12,1:6)]))
 
-Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=30) +
+Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=35) +
     facet_grid(lineage ~ segment.type, scales="free_y") +
     theme_classic() +
-    xlab("log10(Segment Length)") +
-    ylab("Count")
+    xlab(expression("log"[10]*"(Segment Length)")) +
+    ylab("Count") +
+    theme(text=element_text(family="serif")) +
+    theme(strip.background=element_blank())
 
-ggsave("/Users/Rohandinho/Desktop/Fig5.pdf",Fig5)
+ggsave("/Users/Rohandinho/Desktop/Fig5.pdf",Fig5,width=4,height=7)
 
 ## STATISTICAL TEST:
 ## are the distributions of K-12 chunks (or LTEE chunks)
@@ -801,7 +800,7 @@ skip.me <- c("Ara+2","Ara-3","Ara-2", "Ara+3", "Ara+6")
 kruskal.test(chunk.length ~ lineage, data=filter(odd.K12.chunks,!lineage %in% skip.me))
 kruskal.test(chunk.length ~ lineage, data=filter(odd.LTEE.chunks,!lineage %in% skip.me))
 
-
+###################################
 ## Table 5. New synonymous mutations in evolved clones.
 ## Tabulate dS and number of recombination chunks.
 ##calculate ratio of dS by recombination/dS by mutation
@@ -817,7 +816,6 @@ recomb.mut.ratio.table <- filter(labeled.mutations,mut.annotation=='dS') %>%
     left_join(all.K12.chunk.count) %>%
     mutate(dS.r.over.m.ratio=tot.recomb.dS/tot.new.dS) %>%
     mutate(event.r.over.m.ratio=recombination.events/tot.new.dS)
-
 
 write.csv(recomb.mut.ratio.table,"../results/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
 
@@ -852,16 +850,42 @@ evoexp.data <- evoexp.labeled.mutations %>%
 ## However, selection is already acting on deleterious K-12 mutations.
 ## See Good and Desai (2014) for discussion of deleterious hitchhikers.
 K12.evoexp.data <- filter(evoexp.data,lbl==1)
-## cluster mutations based on initial frequency, final frequency, and genomic position.
-Fig7.cluster.plot <- ggplot(K12.evoexp.data,
-                            aes(x=initial.freq,y=final.freq,color=position)) +
-    geom_point(size=0.3) + theme_classic() + geom_abline(slope=1,intercept=0) +
-    scale_color_viridis(option="plasma") +
-    facet_wrap( ~ lineage , ncol=4) +
-    ylab('Frequency at generation 1200') +
-    xlab('Frequency at generation 1000')
-ggsave("/Users/Rohandinho/Desktop/Fig7.pdf",Fig7.cluster.plot)
 
+## cluster mutations based on initial frequency, final frequency, and genomic position.
+make.Fig7 <- function(K12.evoexp.data) {
+
+    Fig7.cluster.plot <- ggplot(K12.evoexp.data,
+                            aes(x=initial.freq,y=final.freq,color=rotated.position)) +
+    geom_point(size=0.3) +
+    geom_rangeframe(color='black') +
+    theme_tufte() +
+    geom_abline(slope=1,intercept=0,size=0.5,linetype="dashed") +
+    scale_color_viridis(option="magma") +
+    facet_wrap( ~ lineage , ncol=4) +
+    xlim(0,1) +
+    ylim(0,1) +
+    ylab('Frequency of K-12 alleles at generation 1200') +
+    xlab('Frequency of K-12 alleles at generation 1000') +
+    theme(axis.text.x = element_text(angle=45, hjust=1)) +
+    guides(color=FALSE)
+
+    return(Fig7.cluster.plot)
+}
+
+Fig7 <- make.Fig7(K12.evoexp.data)
+
+ggsave("/Users/Rohandinho/Desktop/Fig7.pdf",Fig7,width=7.5,height=7.5)
+
+## make the same figure, but for 'new' mutations (lbl==3).
+new.evoexp.data <- filter(evoexp.data,lbl==3)
+new.plot <- make.Fig7(new.evoexp.data)
+ggsave("/Users/Rohandinho/Desktop/new.cluster.pdf",new.plot,width=7.5,height=7.5)
+## This plot shows an extremely strong correlation between K-12 mutations and 'new'
+## mutations. The best interpretation is that 'new' mutations are introduced by
+## recombination, either by gene conversion, or by K-12 reads mapping to
+## non-homologous E. coli B regions.
+
+################
 
 ## How many erased mutations fixed in the STLE and continuation?
 erased.evoexp.mutations <- evoexp.data %>% filter(lbl==4)
@@ -877,10 +901,7 @@ non.fixed.erasures <- erased.evoexp.mutations %>% filter(final.freq != 1 & initi
 neutrality.test.data <- filter(evoexp.data,final.freq==1 |final.freq==0) %>%
     filter(lbl==1 | lbl==3)
 
-neutrality.plot <- ggplot(neutrality.test.data,aes(x=initial.freq)) + geom_density() +
-    theme_classic() + facet_wrap(final.freq ~ lbl)
-
-##    Compare K-12 to new mutations in STLE continuation.
+##    Compare K-12 to 'new' mutations in STLE continuation.
 ##    Consider a mutation fixed, if it is at frequency 1
 ##    at both 1000 gen and 1200 gen timepoints.
 evoexp.fixations <- evoexp.data %>% filter(final.freq==1 & initial.freq==1) %>%
@@ -912,7 +933,6 @@ K12.parallel.evoexp.dN.fixations.by.gene <- evoexp.fixations %>%
     group_by(gene.annotation) %>% make.parallel.table(K12=TRUE, dS=FALSE)
 K12.parallel.evoexp.dS.fixations.by.gene <- evoexp.fixations %>%
     group_by(gene.annotation) %>% make.parallel.table(K12=TRUE, dS=TRUE)
-
 
 ## New mutations look like false positives due to gene conversion (or bad mapping).
 ## That's because dN and dS cluster on position, and dS 'new mutations' occur at the
@@ -998,12 +1018,12 @@ inferred.LCA <- mutate(evoexp.clone.intersection,
 Fig8 <- Fig1.function(inferred.LCA,genes.to.label,analysis.type='evoexpLCA')
 ggsave("/Users/Rohandinho/Desktop/Fig8.pdf", Fig8,width=8,height=10)
 
-##scored.LCA.evoexp.data <- score.introgression(LCA.evoexp.data)
-##LCA.introgressed.genes <- get.introgressed.genes(scored.LCA.evoexp.data)
+scored.LCA <- score.introgression(inferred.LCA)
+LCA.introgressed.genes <- get.introgressed.genes(scored.LCA)
 
-##LCA_Fig3 <- makeFig3(scored.LCA.evoexp.data,auxotrophs,hfrs)
-##ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",LCA_Fig3)
-
+Fig9 <- makeFig3(scored.LCA,auxotrophs,hfrs)
+ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",Fig9,height=2.5,width=6)
+## NOTE: fix delta symbol in Illustrator.
 
 ## find mutations in the LCA.evoexp.data that
 ## 1) do not intersect with the odd clones
