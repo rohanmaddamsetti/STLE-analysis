@@ -880,7 +880,7 @@ Fig6C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Cl
 
 ## arrange panes with cowplot.
 Fig6 <- plot_grid(Fig6A, Fig6B, Fig6C, labels = c("A", "B", "C"), ncol = 1)
-save_plot("~/Desktop/Fig6.pdf", Fig6, ncol = 1, nrow = 3, base_aspect_ratio = 3)
+save_plot("~/Desktop/Fig6.pdf", Fig6, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
 
 ## clean up memory.
 rm(Fig6.data,Fig6A.data,Fig6B.data,Fig6C.data)
