@@ -33,6 +33,7 @@
 
 ## Usage8: python label_mutations.py REL606 8 > ../results/evolution-experiment/evoexp_labeled_mutations.csv
 
+## Usage9: python label_mutations.py REL606 9 > ../results/turner_clones_labeled_mutations.csv
 
 ## An R script called dissertation_analysis.R makes figures and does stats
 ## using these three csv files (output of this script for 1,2,3)
@@ -121,7 +122,7 @@ def parse_annotated_gd(gdfile):
     return gd_dict
 
 def muts_equal(mut1,mut2):
-    ''' hack method, I should rewrite mutations as a class and
+    ''' hack method, I could rewrite mutations as a class and
     overload the == operator to compare mutations in the future.
     '''
     ## cut off the last field in the string (which should be mutation frequency)
@@ -423,5 +424,8 @@ def main():
     elif args.analysis_stage == 8:
         if args.ref_genome == 'REL606':
             make_ref_labeled_muts_csv(join(proj_dir,evo_exp_gd_dir),evoexp=True)
+    elif args.analysis_stage == 9:
+        make_turner_labeled_muts_csv(join(proj_dir,REL606_gd_dir))
+
 
 main()

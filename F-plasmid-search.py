@@ -3,26 +3,15 @@
 '''
 F-plasmid-search.py by Rohan Maddamsetti.
 
-This script makes 3 figures, when examining breseq assemblies against
-the F-plasmid reference genome.
-1) makes violin plots of the coverage distribution for clones from each population.
-2) plot ribbon plots of the coverage over the F-plasmid reference genome.
-3) compares F-plasmid coverage to chromosome coverage in the donors versus
-   in the 4 Ara-3 endpoint clones. By eye I see a 2-fold excess of the plasmid.
-
-This script repeats 1) and 2) on the endpoint samples of my STLE continuation
-evolution experiment, in order to show that the F-plasmid is apparently present
-in the Ara+1 population as well as the Ara-3 population.
+This script writes out csv files of F plasmid coverage for clones and
+for evolution experiment samples. Graphs of these data are made in
+dissertation-analysis.R.
 
 '''
 
 from os import makedirs, listdir, chdir, getcwd
 from os.path import exists, join, basename, isdir
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-##import numpy as np
-##from scipy.stats import ks_2samp, mannwhitneyu
 
 def make_STLE_clone_coverage_df():
     '''
@@ -80,9 +69,6 @@ def make_STLE_clone_coverage_df():
                     line_data = line.split()
                     unique_coverage = int(line_data[0]) + int(line_data[1])
                     position = int(line_data[-1])
-                    ## skip rows with coverage 0.
-                    ##if unique_coverage == 0:
-                    ##    continue
                     ## Now add row data into each column list.
                     strain_type_col.append(strain_type)
                     lineage_col.append(lineage)
@@ -179,149 +165,9 @@ def make_evolexp_coverage_df():
 
     evolexp_df = pd.DataFrame( { 'Generation' : generation_col,
                          'Lineage' : lineage_col,
-                         'Unique Coverage' :  unique_cov_col,
+                         'Coverage' :  unique_cov_col,
                          'Position' : position_col })
     return evolexp_df
-
-def make_violin_plot(df,evolexp=False):
-    '''
-    make violin plot with seaborn.
-    '''
-    sns.set(style="ticks")
-    plt.figure()
-
-    if evolexp:
-        ax = sns.violinplot(x="Lineage", y="Unique Coverage",hue='Generation',split=True, data=df)
-        plt.savefig("/Users/Rohandinho/Desktop/evolexp_test.pdf", format='PDF')
-    else:
-        ax = sns.violinplot(x="Lineage", y="Unique Coverage", data=df)
-        if not evolexp:
-            plt.savefig("/Users/Rohandinho/Desktop/Fig6.pdf", format='PDF')
-        else:
-            plt.savefig("/Users/Rohandinho/Desktop/test.pdf", format='PDF')
-
-def make_coverage_small_multiple(df,evolexp=False):
-    '''
-    make small multiples of coverage over F-plasmid reference.
-    '''
-    sns.set(style="ticks")
-    plt.figure()
-
-    if evolexp:
-        g = sns.FacetGrid(df, row="Generation", col="Lineage")
-        g.map_dataframe(plt.plot, "Position", "Unique Coverage")
-        ## TODO: fix the x-axis. try to use scientific notation on x-axis.
-        #g.set(xaxis.get_major_formatter().set_powerlimits((0, 1))
-        g.set(xticklabels=[])
-        plt.savefig("/Users/Rohandinho/Desktop/FigS5.pdf", format='PDF')
-
-    else:
-        ## sum coverage by position (summing over clones in the same lineage)
-        df2 = df.groupby(["Lineage","Position"], as_index=False).sum()
-        g = sns.FacetGrid(df2, col="Lineage", col_wrap=4, size=2)
-        g.map_dataframe(plt.plot, "Position", "Unique Coverage")
-        ## TODO: fix the x-axis. try to use scientific notation on x-axis.
-        #g.set(xaxis.get_major_formatter().set_powerlimits((0, 1))
-        g.set(xticklabels=[])
-        plt.savefig("/Users/Rohandinho/Desktop/FigS4.pdf", format='PDF')
-
-def make_coverage_lineplot(df,evolexp=False):
-    '''
-    make Figure 6 of clone coverage over F-plasmid reference.
-    '''
-    sns.set(style="ticks")
-    plt.figure()
-
-    if evolexp:
-        pass
-    else:
-        sns.tsplot(data=df, time="Position", #unit="Clone",
-           condition="Clone", value="Coverage")
-        ##g.map_dataframe(plt.plot, "Position", "Unique Coverage")
-        ## TODO: fix the x-axis. try to use scientific notation on x-axis.
-        ##g.set(xaxis.get_major_formatter().set_powerlimits((0, 1))
-        ##g.set(xticklabels=[])
-        plt.savefig("/Users/Rohandinho/Desktop/test.pdf", format='PDF')
-
-
-def make_fig10():
-    '''
-    Make a pandas dataframe containing coverage information
-    among the Ara-3 and Ara+1 STLE continuation populations,
-
-    To avoid auto-correlation in the coverage sampling, use coverage every 500 bp
-    (since short reads at most gives 350 bp of information).
-'''
-
-    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-
-    lineage_col = []
-    unique_cov_col = []
-    position_col = []
-    refseq_col = [] ## values are either "CHR" or "F"
-    sample_col = []
-
-    lineage_dict = {"RM3-149-1":'Ara+1', "RM3-149-9":'Ara-3', "RM3-153-1":'Ara+1', "RM3-153-9":'Ara-3'}
-    samples = lineage_dict.keys()
-    chr_coverage_dir = join(projdir,"breseq-assemblies/evolution-experiment/coverage")
-    F_coverage_dir = join(projdir,"breseq-assemblies/evolution-experiment/F-plasmid-coverage")
-
-    for xf in [y for y in listdir(chr_coverage_dir) if y.endswith(".tab")]:
-        for sample in samples:
-            ## make sure we have the right sample.
-            if sample in xf:
-                this_cov_fh = open(join(chr_coverage_dir,xf))
-                for i,line in enumerate(this_cov_fh):
-                    ## skip header, and sample once every 500 positions.
-                    if i == 0 or i % 500 != 1:
-                        continue
-                    line_data = line.split()
-                    unique_coverage = int(line_data[0]) + int(line_data[1])
-                    position = int(line_data[-1])
-                    lineage = lineage_dict[sample]
-                    ## Now add row data into each column list.
-                    sample_col.append(sample)
-                    refseq_col.append("CHR")
-                    lineage_col.append(lineage)
-                    unique_cov_col.append(unique_coverage)
-                    position_col.append(position)
-
-    for xf in [y for y in listdir(F_coverage_dir) if y.endswith(".tab")]:
-        for sample in samples:
-            ## make sure we have the right sample.
-            if sample in xf:
-                this_cov_fh = open(join(F_coverage_dir,xf))
-                for i,line in enumerate(this_cov_fh):
-                    ## skip header, and sample once every 500 positions.
-                    if i == 0 or i % 500 != 1:
-                        continue
-                    line_data = line.split()
-                    unique_coverage = int(line_data[0]) + int(line_data[1])
-                    position = int(line_data[-1])
-                    lineage = lineage_dict[sample]
-                    ## Now add row data into each column list.
-                    sample_col.append(sample)
-                    refseq_col.append("F")
-                    lineage_col.append(lineage)
-                    unique_cov_col.append(unique_coverage)
-                    position_col.append(position)
-
-    df = pd.DataFrame({
-        'Sample' : sample_col,
-        'Reference' : refseq_col,
-        'Lineage' : lineage_col,
-        'Unique Coverage' :  unique_cov_col,
-        'Position' : position_col
-    })
-
-    ## Make a box plot comparing T=1000 to T=1200 and CHR to F for Ara+1 and Ara-3 samples.
-    sns.set(style="ticks")
-    plt.figure()
-    v = sns.boxplot(x="Sample", y="Unique Coverage",hue="Reference", data=df)
-    plt.ylim(-100, 1000)
-    plt.savefig("/Users/Rohandinho/Desktop/Fig10.pdf", format='PDF')
-
-    return df
 
 def main():
 
@@ -329,21 +175,14 @@ def main():
     stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
     outdir = join(projdir,"results/F-plasmid-search")
 
-    ## Make Figure 6 and Figure S4.
     df = make_STLE_clone_coverage_df()
-    ##make_violin_plot(df)
-    ##make_coverage_small_multiple(df)
-    #make_coverage_lineplot(df)
-
-    ## Make Figure S5.
-    ##df2 = make_evolexp_coverage_df()
-    ##make_coverage_small_multiple(df2,evolexp=True)
-
-    ## Make Figure 10.
-    #make_fig10()
+    df2 = make_evolexp_coverage_df()
+    df3 = make_fig10_df()
 
     ## write clone coverage to csv.
     df.to_csv(join(projdir,"results/STLE-clone-F-coverage.csv"))
+    ## write evoexp coverage to csv.
+    df2.to_csv(join(projdir,"results/STLE-evoexp-F-coverage.csv"))
 
 main()
 

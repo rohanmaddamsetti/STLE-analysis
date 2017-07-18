@@ -92,8 +92,10 @@ K12.diff.data <- tbl_df(read.csv("../results/K-12-differences.csv")) %>%
 
 ## get F-plasmid coverage data for clones and for evolution experiment.
 STLE.clone.F.coverage <- tbl_df(read.csv("../results/STLE-clone-F-coverage.csv"))
+STLE.evoexp.F.coverage <- tbl_df(read.csv("../results/STLE-evoexp-F-coverage.csv")) %>%
+            mutate(Lineage=factor(Lineage,
+                                  levels=c('Ara+1','Ara+2','Ara+3','Ara+4','Ara+5','Ara+6','Ara-1','Ara-2','Ara-3','Ara-4','Ara-5','Ara-6')))
 
-STLE.evoexp.F.coverage <- tbl_df(read.csv("../results/STLE-evoexp-F-coverage.csv"))
 
 ######
 ## First, separate into odd or even clones, and
@@ -101,12 +103,14 @@ STLE.evoexp.F.coverage <- tbl_df(read.csv("../results/STLE-evoexp-F-coverage.csv
 odd.genomes <- filter(labeled.mutations, odd==TRUE)
 even.genomes <- filter(labeled.mutations, odd==FALSE)
 
+## This x-axis label is re-used a lot.
+oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
+
 ##################################################################################
 ## Make Figures and Tables.
 
 ## Figure S1. Density of differences between K-12 and REL606.
 
-oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
 FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=400) + theme_tufte() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
 ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1,height=3,width=4)
 
@@ -223,7 +227,7 @@ donor.mutations <- filter(labeled.mutations,lbl == 6 | lbl==7 | lbl == 8 | lbl =
     mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
     ## reorder factor for plotting.
     mutate(genome=factor(genome,levels=levels(genome)[c(12:21,1:11)])) %>%
-    select(-odd,-frequency) %>%
+    select(-frequency) %>%
     arrange(genome,position) %>%
     distinct(genome, position, .keep_all = TRUE)
 
@@ -232,23 +236,6 @@ donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summaris
 
 Fig2 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif"))
 ggsave("/Users/Rohandinho/Desktop/Fig2.pdf",Fig2,width=11,height=8)
-
-############# Fig. S3: location of donor specific mutations on the chromosome.
-## TODO: Make FigS3 look much better.
-only.donor.mutations <- donor.mutations %>%
-    mutate(y.center=35-match(lbl,sort(unique(lbl)))*10,y1=y.center-3,y2=y.center+3)
-
-FigS3 <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.position,y=y1,yend=y2,colour=lbl)) +
-    geom_segment(size=0.05) + theme_tufte() +
-    scale_colour_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) +
-    xlab(oriC.xlab) +
-    ## add auxotroph lines
-    geom_vline(data=auxotrophs,aes(xintercept=rotated.position),size=0.05,linetype="dashed") +
-    geom_text_repel(data=auxotrophs,aes(x=rotated.position,y=8.2,label=annotation),inherit.aes=FALSE, size=3) +
-    ## add annotation of Hfr and oriC on chromosome.
-   geom_text_repel(data=hfrs,aes(x=rotated.position,y=-0.3,label=Hfr.orientation),inherit.aes=FALSE,size=3,nudge_y=-0.3)
-
-ggsave("/Users/Rohandinho/Desktop/FigS3.pdf",FigS3,width=11,height=8)
 
 #############################################################
 ## Figure S2 and Figure 3.
@@ -277,11 +264,11 @@ get.introgressed.genes <- function(introgression.scores) {
     select(introgression.scores,-rotated.position) %>% distinct()
 }
 
-makeFig3 <- function(scores, auxotrophs, hfrs) {
+makeFig3A <- function(scores, auxotrophs, hfrs) {
 
     oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
 
-    Fig3 <- ggplot(scores, aes(x=rotated.position,y=introgression.score)) +
+    Fig3A <- ggplot(scores, aes(x=rotated.position,y=introgression.score)) +
         geom_line(size=0.05) +
         ## fit a natural cubic spline with 100 degrees of freedom.
         geom_smooth(method='lm', formula = y ~ ns(x,100)) +
@@ -323,20 +310,58 @@ makeFig3 <- function(scores, auxotrophs, hfrs) {
 
 odd.introgression.scores <- score.introgression(odd.genomes)
 
-## Figure 3.
+## Figure 3A.
 ## Visual comparisons of parallel recombination across lineages
 ## with the G-score of mutations over the genome, and with the occurrence of
 ## new mutations over the genome.
 ## This is only made with odd genomes at the moment.
 
-Fig3 <- makeFig3(odd.introgression.scores,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3,height=2.5,width=6)
+Fig3A <- makeFig3A(odd.introgression.scores,auxotrophs,hfrs)
+ggsave("/Users/Rohandinho/Desktop/Fig3A.pdf",Fig3A,height=2.5,width=6)
 ## NOTE: The delta does not print properly but can fix in Illustrator.
 
 ## which genes get introgressed the most? is this a sign of positive selection?
 odd.introgressed.genes <- get.introgressed.genes(odd.introgression.scores)
 
-## Fig. S2: Does sequence divergence/conservation predict location of markers? NO.
+############# Fig. 3B: location of donor specific mutations on the chromosome.
+
+donor.lbl.map <- function (vec) sapply(vec, function(lbl) {
+    if (lbl == 6) {
+        return('REL288')
+    } else if (lbl == 7) {
+        return('REL291')
+    } else if (lbl == 8) {
+        return('REL296')
+    } else if (lbl == 9) {
+        return('REL298')
+    } else {
+        return('NA')
+    }
+} )
+
+only.donor.mutations <- donor.mutations %>%
+    mutate(y.center=5,y1=y.center-3,y2=y.center+3) %>%
+    droplevels() %>% filter(odd == TRUE) %>% mutate(Donor.strain=donor.lbl.map(lbl))
+
+Fig3B <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.position,y=y1,yend=y2,colour=Donor.strain)) +
+    geom_segment(size=0.05) +
+    theme_tufte() +
+    xlab(oriC.xlab) +
+    theme(axis.title.y = element_text(color = "white"),
+          axis.text.y = element_text(color='white'),
+          axis.ticks.y=element_blank()) +
+    ## add auxotroph lines.
+    geom_vline(data=auxotrophs,aes(xintercept=rotated.position,color=Donor.strain),size=0.5,linetype="dashed") +
+    guides(fill=FALSE,color=FALSE) +
+    ## annotate Hfr oriT on chromosome.
+    geom_label_repel(data=hfrs,aes(x=rotated.position,y=-2,label=Hfr.orientation,
+                                   fill=Donor.strain),inherit.aes=FALSE,size=2.5,
+                    point.padding = unit(0,"lines"),color = 'white')
+
+ggsave("/Users/Rohandinho/Desktop/Fig3B.pdf",Fig3B,height=1,width=6)
+
+
+## Fig. S3: Does sequence divergence/conservation predict location of markers? NO.
 ## Perhaps do this differently after showing to Rich.
 ## make a scatterplot of Fig. S1 and Fig. 3.
 
@@ -369,11 +394,11 @@ median.introgression.data <- introgression.vs.divergence.data %>%
 introgression.divergence.model <- lm(median.introgression~divergence,data=median.introgression.data)
 confint(introgression.divergence.model)
 
-FigS2 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
-    geom_jitter() + ylab("Median Introgression") + xlab("Divergence") +
+FigS3 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
+    geom_jitter() + ylab("Median Introgression within Bin") + xlab("K-12 Differences within Bin") +
     theme_tufte()
 
-ggsave("/Users/Rohandinho/Desktop/FigS2.pdf",FigS2,width=11,height=8)
+ggsave("/Users/Rohandinho/Desktop/FigS3.pdf",FigS3,width=11,height=8)
 
 
 ####################################################################################################
@@ -859,7 +884,8 @@ Fig6C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Cl
 Fig6 <- plot_grid(Fig6A, Fig6B, Fig6C, labels = c("A", "B", "C"), ncol = 1)
 save_plot("~/Desktop/Fig6.pdf", Fig6, ncol = 1, nrow = 3, base_aspect_ratio = 3)
 
-
+## clean up memory.
+rm(Fig6.data,Fig6A.data,Fig6B.data,Fig6C.data)
 
 ####################################################################################################
 ## Analyze evolution experiment results.
@@ -1068,6 +1094,15 @@ ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",Fig9,height=2.5,width=6)
 ## NOTE: fix delta symbol in Illustrator.
 
 ########################################
-## Figure S5:
+## Figure S4: F-plasmid coverage in STLE continuation experiment
+## at generation 1000 and 1200.
 
-## Figure 10.
+FigS4 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1),color=Lineage)) +
+    geom_line() +
+    theme_tufte() +
+    ylab(expression("log"[10]*"(Coverage + 1)")) +
+    scale_color_manual(values=c("red",rep('black',6),'red',rep('black',3))) +
+    guides(color=FALSE) +
+    facet_grid(Lineage ~ Generation,labeller=labeller(Generation = c('1000'='Generation 1000','1200'='Generation 1200')))
+
+ggsave("/Users/Rohandinho/Desktop/FigS4.pdf",FigS4)
