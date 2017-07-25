@@ -545,137 +545,6 @@ G.score.rest.new.odd.mutations <- left_join(rest.new.odd.mutations,G.score.temp)
 ## get average G.score of genes mutated in Ara+1, Ara-3, Ara-4.
 special.G.score <- filter(G.score.rest.new.odd.mutations, lineage == 'Ara+1'|lineage=='Ara-3'|lineage=='Ara-4') %>% summarize(mean.G.score=mean(G.score))
 
-#######################################################################################################################
-## K-12 specific genes analysis.
-
-## positions have already been filtered by a coverage threshold (past 5% probability
-## under REL606 1X coverage distribution).
-
-#' Find K-12 specific segments. return boundaries for each segment.
-#' @export
-find.K12.segments <- function(filtered.coverage) {
-
-    ## calculate intervals.
-    boundaries <- filtered.coverage %>% mutate(left.diff=K12_position - lag(K12_position)) %>%
-        mutate(right.diff=lead(K12_position) - K12_position) %>%
-        ## corner case: check for the NA values at the endpoints and set them as boundaries.
-        mutate(is.right.boundary=is.na(right.diff)|ifelse(right.diff>1,TRUE,FALSE)) %>%
-        mutate(is.left.boundary=is.na(left.diff)|ifelse(left.diff>1,TRUE,FALSE)) %>%
-        filter(is.left.boundary==TRUE | is.right.boundary==TRUE)
-
-    left.boundaries <- filter(boundaries,is.left.boundary==TRUE) %>% arrange(K12_position)
-    right.boundaries <- filter(boundaries,is.right.boundary==TRUE) %>% arrange(K12_position)
-    assert_that(nrow(left.boundaries) == nrow(right.boundaries))
-
-    K12.segments <- data.frame(left.boundary=left.boundaries$K12_position,
-                               right.boundary=right.boundaries$K12_position) %>%
-        ## filter out intervals less than the length of a read (250 bp for these data).
-        mutate(len=right.boundary-left.boundary) %>% filter(len>250) %>%
-        mutate(segment.index=row_number())
-    return(K12.segments)
-}
-
-## this helper function is a wrapper around functions from genbankr package.
-parse.ref.genes <- function(ref.gbk) {
-    ref.genes <- ref.gbk %>% parseGenBank %>% make_gbrecord %>% genes
-    return(ref.genes)
-}
-
-## input: ref.gbk: file.path of the reference genome,
-##    : data.frame returned by find.K12.segments.
-annotate.segments <- function(segments,ref.genes) {
-
-    ## create the IRanges object.
-    amp.ranges <- IRanges(segments$left.boundary,segments$right.boundary)
-    ## Turn into a GRanges object in order to find overlaps with ref genes.
-    g.amp.ranges <- GRanges("K-12",ranges=amp.ranges)
-    ## and add the data.frame of segments as metadata.
-    mcols(g.amp.ranges) <- segments
-
-    ## find overlaps between ref genes and segments.
-    hits <- findOverlaps(ref.genes,g.amp.ranges,ignore.strand=FALSE)
-    ## take the hits, the ref annotation, and the segments,
-    ## and produce a table of genes found in each segment.
-
-    hits.df <- data.frame(query.index=queryHits(hits),subject.index=subjectHits(hits))
-
-    query.df <- data.frame(query.index=1:length(ref.genes),
-                           gene=ref.genes$gene,locus_tag=ref.genes$locus_tag,
-                           start=start(ranges(ref.genes)),end=end(ranges(ref.genes)))
-
-    subject.df <- bind_cols(data.frame(subject.index=1:length(g.amp.ranges)),data.frame(mcols(g.amp.ranges)))
-
-    segment.genes.df <- left_join(hits.df,query.df) %>% left_join(subject.df) %>%
-        ## if gene is NA, replace with locus_tag. have to change factors to strings!
-        mutate(gene = ifelse(is.na(gene),as.character(locus_tag),as.character(gene)))
-
-    return(segment.genes.df)
-}
-
-projdir <- "/Users/Rohandinho/Desktop/Projects/STLE-analysis"
-K12.specific.dir <- file.path(projdir,"results/K12-specific-genes")
-breseq.out.dir <- file.path(projdir,"breseq-assemblies/REL606-polymorphism")
-REL606.gb <- file.path(projdir,"references/REL606.7.gbk")
-K12.gb <- file.path(projdir,"references/K-12.1.gbk")
-
-## parse K12.genes (this is sloooow.)
-K12.genes <- parse.ref.genes(K12.gb)
-
-## pop.and.clone.metadata contains info on which samples are mixed pops. etc.
-K12.LENGTH <- 4641652
-
-K12.cov.file <- file.path(K12.specific.dir,"K12-coverage.csv")
-
-K12.specific.coverage <- fread(K12.cov.file)
-pop.and.clone.metadata <- mutate(pop.and.clone.metadata,genome=Name)
-K12.specific.data <- tbl_df(left_join(data.frame(K12.specific.coverage),pop.and.clone.metadata))
-
-K12.clone.data <- filter(K12.specific.data,is.Clone==1,Generation==1000) %>%
-    select(-Name) %>% mutate(Name=factor(paste(Population,REL.Name,sep=': '))) %>%
-    group_by(Name)
-
-## label clones as even or odd based on REL numbering for parallelism analysis.
-
-clone.genome.names <- levels(K12.clone.data$REL.Name)
-is.odd <- sapply(clone.genome.names, function(x) ifelse(strtoi(substr(x,nchar(x),nchar(x)))%%2, TRUE,FALSE))
-
-odd.K12.clone.data <- K12.clone.data %>% mutate(odd=is.odd[REL.Name]) %>%
-    filter(odd==TRUE)
-
-## group_by mixed.pop.data and then filter for positions
-## that passed the threshold in both T0 and T1 samples.
-K12.mixed.pop.data <- filter(K12.specific.data,is.Clone==0,Generation %in% c(1000,1200)) %>%
-    group_by(Population,K12_position) %>% summarize(row.num=n()) %>% filter(row.num==2)
-
-## Split-Apply-Combine to get K-12 specific segments.
-
-fixed.K12.segments <- K12.mixed.pop.data %>% do(find.K12.segments(.))
-clone.K12.segments <- K12.clone.data %>% do(find.K12.segments(.))
-
-odd.clone.K12.segments <- odd.K12.clone.data %>% do(find.K12.segments(.))
-
-## Now, annotate those segments.
-annotated.fixed.K12.segments <- annotate.segments(fixed.K12.segments,K12.genes) %>% mutate(length=end-start)
-annotated.clone.K12.segments <- annotate.segments(clone.K12.segments,K12.genes) %>% mutate(length=end-start)
-odd.annotated.clone.K12.segments <- annotate.segments(odd.clone.K12.segments,K12.genes) %>% mutate(length=end-start)
-
-write.csv(x=annotated.clone.K12.segments,file=file.path(K12.specific.dir,"clone.K12.segs.csv"))
-write.csv(x=annotated.fixed.K12.segments,file=file.path(K12.specific.dir,"fixed.K12.segs.csv"))
-
-## This shows that IS5 transposons found in K-12 but not in REL606,
-## as shown by a BLAST search, have introgressed into evolved genomes
-## (can't tell if fixed since occur at multiple copies)
-fixed.K12.seg.parallelism <- annotated.fixed.K12.segments %>% group_by(gene,locus_tag) %>% summarise(count=n()) %>% arrange(desc(count),locus_tag)
-
-## TODO: DOUBLE CHECK THESE NUMBERS BY HAND IF REPORTED IN THE PAPER!
-clone.K12.seg.parallelism <- odd.annotated.clone.K12.segments %>% group_by(gene,locus_tag) %>% summarise(count=n()) %>% arrange(desc(count),locus_tag)
-
-## plot distribution of K-12 specific segment lengths.
-fixed.K12.segment.plot <- ggplot(annotated.fixed.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Population ~ .) + theme_tufte()
-ggsave("/Users/Rohandinho/Desktop/fixed-K12-segments.pdf",fixed.K12.segment.plot)
-clone.K12.segment.plot <- ggplot(annotated.clone.K12.segments,aes(x=length)) + geom_histogram() + facet_grid(Name ~ .) + theme_tufte()
-ggsave("/Users/Rohandinho/Desktop/clone-K12-segments.pdf",clone.K12.segment.plot)
-
 #######################################################
 ## Map recombination breakpoints. Currently breakpoints occur ON
 ## mutations, NOT between mutations.
@@ -761,7 +630,6 @@ index.segments <- function(segment.labels) {
 
     return(segment.indexes)
 }
-
 
 ## This function labels transitions, then labels and indexes segments,
 ## and then calculates changes to segment length due to indels.
@@ -1195,4 +1063,3 @@ FigS5 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1)
     facet_grid(Lineage ~ Generation,labeller=labeller(Generation = c('1000'='Generation 1000','1200'='Generation 1200')))
 
 ggsave("/Users/Rohandinho/Desktop/FigS5.pdf",FigS5)
-
