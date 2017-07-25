@@ -2,8 +2,6 @@
 
 ## label_mutations.py by Rohan Maddamsetti.
 
-## TODO: get rid of unnecessary code.
-
 ## This script generates a csv file from annotated genome diff files.
 ## It labels mutations in recombinant genomes from the end of the Souza-Turner
 ## experiment as being
@@ -38,13 +36,9 @@
 ## An R script called dissertation_analysis.R makes figures and does stats
 ## using these three csv files (output of this script for 1,2,3)
 
-## TODO: represent mutations with a class, rather than a dictionary.
-
 ## TODO: add options that do different stages of the analysis.
 ## TODO: automate the whole pipeline with a makefile.
-
-## NOTA BENE: this is a rough analysis, and the input gd files from breseq resequencing aren't standardized yet.
-## In particular, K-12 assemblies used breseq 0.26, and assemblies may or may not have used an additional Tn10 reference sequence.
+## TODO: get rid of unnecessary code.
 
 import argparse
 from os.path import join, basename, exists

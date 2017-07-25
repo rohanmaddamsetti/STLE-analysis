@@ -116,7 +116,7 @@ oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
 
 ## Figure S1. Density of differences between K-12 and REL606.
 
-FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=400) + theme_tufte() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
+FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=556) + theme_tufte() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
 ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1,height=3,width=4)
 
 
@@ -197,7 +197,7 @@ Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
                          size=2.5) +
         scale_fill_manual(values=c('black','#d7191c'),
                           labels=c("new","replaced")) +
-        guides(fill=FALSE) +
+        guides(fill=FALSE,shape=FALSE,color=FALSE) +
         scale_colour_manual(values=c('#ffffbf', '#abd9e9', 'black','#d7191c','#f1b6da'),
                             name='color',
                             labels=c("K-12","LTEE","new","replaced","deleted")) +
@@ -223,7 +223,7 @@ ggsave("/Users/Rohandinho/Desktop/FigS2.pdf", FigS2,width=8,height=10)
 
 
 ##############################################################################
-## Figures 2, 3, and S3.
+## Figures 2, 6, and S3.
 donor.mutations <- filter(labeled.mutations,lbl == 6 | lbl==7 | lbl == 8 | lbl == 9) %>%
     mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
     ## reorder factor for plotting.
@@ -352,17 +352,95 @@ Fig2B <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.positio
 
 ggsave("/Users/Rohandinho/Desktop/Fig2B.pdf",Fig2B,height=1,width=6)
 
-############## Fig. 3: Number of donor specific mutations in each clone.
-donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summarise(count=n())
+########################################
+## Figure S3: 'Figure 1' for the Turner clones.
 
-Fig3 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif")) + guides(fill=FALSE)
-ggsave("/Users/Rohandinho/Desktop/Fig3.pdf",Fig3,width=6,height=4)
+FigS3.function <- function(mut.df, genes.to.label) {
+    ## REL606 markers are negative space on the plot.
+    ## also, reverse levels to get Ara+1 genomes on top of plot.
+    ## ylim from 0 to 30. plot 2 genomes/lineages on 10,20. so map genome/lineage to a center position.
 
-##############
-## Fig. S3: Does sequence divergence/conservation predict location of markers? NO.
-## Perhaps do this differently after showing to Rich.
-## make a scatterplot of Fig. S1 and Fig. 3.
+    ## for max ylim.
+    y.pad <- 10
+    y.max <- 3 * y.pad ## 30
 
+    no.B.genomes <- filter(mut.df,lbl!='0') %>%
+                mutate(genome=factor(genome,
+                              levels=c('REL4397','REL4398'))) %>%
+        arrange(genome,position) %>%
+        mutate(y.center=y.max-match(genome,levels(genome))*y.pad,
+               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3) %>%
+        ## turn lbls for donor-specific markers into K-12 lbls.
+        mutate(lbl = replace(lbl,lbl %in% c('6','7','8','9'),'1')) %>%
+        ## then turn into a factor.
+        mutate(lbl=factor(lbl))
+
+    ## label the top 32 beneficial LTEE genes with mutations in the recipients with symbols.
+    top.hit.labels <- filter(no.B.genomes, gene.annotation %in% genes.to.label$Gene.name) %>%
+        filter(lbl %in% c(2,3,4)) %>%
+        mutate(y.center=y.max-match(genome,unique(genome))*y.pad,
+               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
+
+    ## reorder top.hit.labels$mut.annotation factor levels for nice plotting.
+    top.hit.labels$mut.annotation <- factor(top.hit.labels$mut.annotation, levels = c("dN", "dS", "indel", "IS-insertion", "base-substitution", "non-coding", "non-point"))
+
+    Fig.xlab <- expression(paste("Distance from ",italic("oriC")))
+
+    ## all donor mutations should be labeled as yellow.
+    panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
+        geom_segment(size=0.05) +
+        theme_tufte() +
+        xlab(Fig.xlab) +
+        ylim(5,y.max-5) +
+        geom_point(data=top.hit.labels,aes(x=rotated.position,
+                                          y=y.center,
+                                          color=lbl,
+                                          shape=mut.annotation)) +
+        ## set the symbols this way:
+        ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
+        scale_shape_manual(values = c(1,0,2,4),name="symbol") +
+        theme(legend.position = "top") +
+        geom_label_repel(data=filter(top.hit.labels,lbl %in% c(3,4)),
+                         aes(x=rotated.position,
+                             y=y.center,
+                             fill=lbl,
+                             label=gene.annotation),
+                         fontface='italic',
+                         color='white',
+                         box.padding = unit(0.35, "lines"),
+                         point.padding = unit(0.5, "lines"),
+                         segment.color = 'grey50',
+                         size=2.5) +
+        scale_fill_manual(values=c('#d7191c'),
+                          labels=c("replaced")) +
+        guides(fill=FALSE,color=FALSE,shape=FALSE) +
+        scale_colour_manual(values=c('#ffffbf', 'black','#d7191c','#f1b6da'),
+                            name='color',
+                            labels=c("K-12","new","replaced","deleted")) +
+        scale_y_continuous(breaks=c(10,20),labels=rev(levels(no.B.genomes$genome))) +
+        ylab("Ara-3 Clone")
+    return(panel)
+}
+
+#########################
+## make Figure S3. Turner clones.
+
+FigS3 <- FigS3.function(turner.clones, genes.to.label)
+ggsave("/Users/Rohandinho/Desktop/FigS3.pdf", FigS3,width=8,height=3)
+
+REL4397.data <- turner.clones %>% select(-frequency) %>% filter(genome=='REL4397') %>%
+    select(-genome,-lineage,-reference)
+REL4398.data <- turner.clones %>% select(-frequency) %>% filter(genome=='REL4398') %>%
+    select(-genome,-lineage,-reference)
+
+## find mutations specific to each clone.
+REL4397.diffs <- setdiff(REL4397.data,REL4398.data)
+REL4398.diffs <- setdiff(REL4398.data,REL4397.data)
+
+REL4397.diffs2 <- REL4397.diffs %>% filter(mut.annotation!='dS',mut.annotation!='non-coding')
+REL4398.diffs2 <- REL4398.diffs %>% filter(mut.annotation!='dS',mut.annotation!='non-coding')
+########################################
+## Fig. S4: Does sequence divergence/conservation predict location of markers? NO.
 ## REMEMBER: divergence and introgression is correlated-- since when there's no divergence,
 ## all introgression events are undetectable! So, more divergence = better resolution of introgression.
 ## this is extra clear when regressing sum(introgression) against divergence in the windows.
@@ -392,15 +470,15 @@ median.introgression.data <- introgression.vs.divergence.data %>%
 introgression.divergence.model <- lm(median.introgression~divergence,data=median.introgression.data)
 confint(introgression.divergence.model)
 
-FigS3 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
+FigS4 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
     geom_jitter() + ylab("Median Introgression within Bin") + xlab("K-12 Differences within Bin") +
     theme_tufte()
 
-ggsave("/Users/Rohandinho/Desktop/FigS3.pdf",FigS3,width=5,height=4)
+ggsave("/Users/Rohandinho/Desktop/FigS4.pdf",FigS4,width=5,height=4)
 
 
 ####################################################################################################
-## Replaced mutations. Table 3 and Figure 4 (Fig. 4 is made separately).
+## Replaced mutations. Table 3 and Figure 3 (Fig. 3 is made separately).
 
 #### Make in-depth alignments of all replaced mutations, with special attention to Ara+1 and Ara-4.
 #### Print out a csv of genes for align_replaced_mutations.py to align,
@@ -604,7 +682,7 @@ ggsave("/Users/Rohandinho/Desktop/clone-K12-segments.pdf",clone.K12.segment.plot
 #######################################################
 ## Map recombination breakpoints. Currently breakpoints occur ON
 ## mutations, NOT between mutations.
-## Main goal of this analysis is to make Figure 5,
+## Main goal of this analysis is to make Figure 4,
 ## a plot of chunk length distributions.
 
 ## This function maps a vector of labels to a vector of transitions between
@@ -794,7 +872,7 @@ donor.and.deleted.markers <- full_join(all.chunk.summary,deleted.marker.summary)
 write.csv(donor.and.deleted.markers,"/Users/Rohandinho/Desktop/percent-greens-in-donor.csv")
 
 ##############################
-## Make Figure 5 (chunk length distributions)
+## Make Figure 4 (chunk length distributions)
 
 all.odd.chunks <- full_join(odd.K12.chunks,odd.LTEE.chunks) %>%
     ## change segment.type to Recipient or Donor
@@ -803,7 +881,7 @@ all.odd.chunks <- full_join(odd.K12.chunks,odd.LTEE.chunks) %>%
     ungroup() %>%
     mutate(lineage=factor(lineage,levels=levels(lineage)[c(7:12,1:6)]))
 
-Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=35) +
+Fig4 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=35) +
     facet_grid(lineage ~ segment.type, scales="free_y") +
     theme_classic() +
     xlab(expression("log"[10]*"(Segment Length)")) +
@@ -812,7 +890,7 @@ Fig5 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins
     theme(strip.background=element_blank()) +
     theme(panel.grid.minor.x=element_line(color='grey90',linetype="dashed"))
 
-ggsave("/Users/Rohandinho/Desktop/Fig5.pdf",Fig5,width=4,height=7)
+ggsave("/Users/Rohandinho/Desktop/Fig4.pdf",Fig4,width=4,height=7)
 
 ## STATISTICAL TEST:
 ## are the distributions of K-12 chunks (or LTEE chunks)
@@ -850,42 +928,49 @@ recomb.mut.ratio.table <- filter(labeled.mutations,mut.annotation=='dS') %>%
 write.csv(recomb.mut.ratio.table,"../results/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
 
 ####################################################################################################
-## Figure 6. Ara-3 clones have the F-plasmid.
+## Figure 5. Ara-3 clones have the F-plasmid.
 
-Fig6.data <- STLE.clone.F.coverage %>% filter(Strain.Type != 'Recipient')
+Fig5.data <- STLE.clone.F.coverage %>% filter(Strain.Type != 'Recipient')
 
-Fig6A.data <- Fig6.data %>% filter (Lineage == 'Ara-3')
-Fig6B.data <- Fig6.data %>% filter (Lineage == 'Donor')
-Fig6C.data <- Fig6.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
+Fig5A.data <- Fig5.data %>% filter (Lineage == 'Ara-3')
+Fig5B.data <- Fig5.data %>% filter (Lineage == 'Donor')
+Fig5C.data <- Fig5.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
 
 ## plot the Ara-3 clone F coverage in shades of orange.
-Fig6A <- ggplot(data=Fig6A.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
+Fig5A <- ggplot(data=Fig5A.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
     geom_line() +
     theme_tufte() +
     guides(color=FALSE) +
     scale_color_manual(values=c('#feedde','#fdbe85','#fd8d3c','#d94701'))
 
 ## keep default colors so that donor colors match with other figures.
-Fig6B <- ggplot(data=Fig6B.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
+Fig5B <- ggplot(data=Fig5B.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
     geom_line() +
     theme_tufte() +
     guides(color=FALSE)
 
 ## plot the rest of the recombinant clones in shades of grey.
-Fig6C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Clone)) +
+Fig5C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Clone)) +
     geom_line() +
     theme_tufte() +
     guides(color=FALSE) +
     scale_colour_grey()
 
 ## arrange panes with cowplot.
-Fig6 <- plot_grid(Fig6A, Fig6B, Fig6C, labels = c("A", "B", "C"), ncol = 1)
-save_plot("~/Desktop/Fig6.pdf", Fig6, ncol = 1, nrow = 3, base_aspect_ratio = 3)
+Fig5 <- plot_grid(Fig5A, Fig5B, Fig5C, labels = c("A", "B", "C"), ncol = 1)
+save_plot("~/Desktop/Fig5.pdf", Fig5, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
 
 ## clean up memory.
-rm(Fig6.data,Fig6A.data,Fig6B.data,Fig6C.data)
+rm(Fig5.data,Fig5A.data,Fig5B.data,Fig5C.data)
 
-####################################################################################################
+############## Fig. 6: Number of donor specific mutations in each clone.
+## NOTE: donor.mutations is defined around Fig. 2B code.
+donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summarise(count=n())
+
+Fig6 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif")) + guides(fill=FALSE)
+ggsave("/Users/Rohandinho/Desktop/Fig6.pdf",Fig6,width=6,height=4)
+
+###############################################################################################
 ## Analyze evolution experiment results.
 
 ## A reminder to what the labels are.
@@ -921,25 +1006,27 @@ K12.evoexp.data <- filter(evoexp.data,lbl==1)
 make.Fig7 <- function(K12.evoexp.data) {
 
     Fig7.cluster.plot <- ggplot(K12.evoexp.data,
-                            aes(x=initial.freq,y=final.freq,color=rotated.position)) +
-    geom_point(size=0.3) +
-    geom_rangeframe(color='black') +
-    theme_tufte() +
-    geom_abline(slope=1,intercept=0,size=0.5,linetype="dashed") +
-    scale_color_viridis(option="magma") +
-    facet_wrap( ~ lineage , ncol=4) +
-    xlim(0,1) +
-    ylim(0,1) +
-    ylab('Frequency of K-12 alleles at generation 1200') +
-    xlab('Frequency of K-12 alleles at generation 1000') +
-    theme(axis.text.x = element_text(angle=45, hjust=1)) +
-    guides(color=FALSE)
+                                aes(x=initial.freq,y=final.freq,color=rotated.position)) +
+        geom_point(size=0.3) +
+        theme_classic() +
+        annotate("segment", x=-Inf, xend=Inf, y=-Inf, yend=-Inf) +
+        annotate("segment", x=-Inf, xend=-Inf, y=-Inf, yend=Inf) +
+        theme(text=element_text(family='serif')) +
+        theme(strip.background=element_blank()) +
+        geom_abline(slope=1,intercept=0,size=0.5,linetype="dashed") +
+        scale_color_viridis(option="magma") +
+        facet_wrap(~lineage , ncol=4) +
+        xlim(0,1) +
+        ylim(0,1) +
+        ylab('Frequency of K-12 alleles at generation 1200') +
+        xlab('Frequency of K-12 alleles at generation 1000') +
+        theme(axis.text.x = element_text(angle=45, hjust=1)) +
+        guides(color=FALSE)
 
     return(Fig7.cluster.plot)
 }
 
 Fig7 <- make.Fig7(K12.evoexp.data)
-
 ggsave("/Users/Rohandinho/Desktop/Fig7.pdf",Fig7,width=7.5,height=7.5)
 
 ## make the same figure, but for 'new' mutations (lbl==3).
@@ -959,6 +1046,14 @@ initial.erasures <- replaced.evoexp.mutations %>% filter(initial.freq == 1)
 final.erasures <- replaced.evoexp.mutations %>% filter(final.freq == 1)
 fixed.erasures <- replaced.evoexp.mutations %>% filter(final.freq == 1 & initial.freq == 1)
 non.fixed.erasures <- replaced.evoexp.mutations %>% filter(final.freq != 1 & initial.freq == 1)
+
+## Is there evidence of new mutations compensating for replaced beneficial LTEE mutations?
+top.fixed.erasures <- filter(fixed.erasures,gene.annotation %in% genes.to.label$Gene.name)
+new.replacements <- filter(evoexp.data,gene.annotation %in% top.fixed.erasures$gene.annotation)
+new.replacements2 <- filter(new.replacements,final.freq==1,mut.annotation=='dN')
+################################################################TODO!!!! FINISH THIS ANALYSIS!!!
+
+## filter out mutations also in the recombinant clones.
 
 ##    Do K-12/new mutations that reached very high frequency (near fixation)
 ##    or very low frequency (near extinction) during the STLE continuation reject
@@ -1049,7 +1144,6 @@ binom.test(2967,9408,p=6726/21551)
 LCA.evoexp.data <- filter(evoexp.data,initial.freq==1 & final.freq == 1)
 
 ## take intersection of even and odd clones.
-
 clone.intersection <- intersect(select(odd.genomes,-genome,-odd,-frequency),select(even.genomes,-genome,-odd,-frequency))
 ## to prevent different factor levels to get in the way of comparisons.
 clone.intersection[] <- lapply(clone.intersection, as.character)
@@ -1092,10 +1186,10 @@ ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",Fig9,height=2.5,width=6)
 ## NOTE: fix delta symbol in Illustrator.
 
 ########################################
-## Figure S4: F-plasmid coverage in STLE continuation experiment
+## Figure S5: F-plasmid coverage in STLE continuation experiment
 ## at generation 1000 and 1200.
 
-FigS4 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1),color=Lineage)) +
+FigS5 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1),color=Lineage)) +
     geom_line() +
     theme_tufte() +
     ylab(expression("log"[10]*"(Coverage + 1)")) +
@@ -1103,93 +1197,5 @@ FigS4 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1)
     guides(color=FALSE) +
     facet_grid(Lineage ~ Generation,labeller=labeller(Generation = c('1000'='Generation 1000','1200'='Generation 1200')))
 
-ggsave("/Users/Rohandinho/Desktop/FigS4.pdf",FigS4)
-
-########################################
-## Figure S5: 'Figure 1' for the Turner clones.
-
-FigS5.function <- function(mut.df, genes.to.label) {
-    ## REL606 markers are negative space on the plot.
-    ## also, reverse levels to get Ara+1 genomes on top of plot.
-    ## ylim from 0 to 30. plot 2 genomes/lineages on 10,20. so map genome/lineage to a center position.
-
-    ## for max ylim.
-    y.pad <- 10
-    y.max <- 3 * y.pad ## 30
-
-    no.B.genomes <- filter(mut.df,lbl!='0') %>%
-                mutate(genome=factor(genome,
-                              levels=c('REL4397','REL4398'))) %>%
-        arrange(genome,position) %>%
-        mutate(y.center=y.max-match(genome,levels(genome))*y.pad,
-               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3) %>%
-        ## turn lbls for donor-specific markers into K-12 lbls.
-        mutate(lbl = replace(lbl,lbl %in% c('6','7','8','9'),'1')) %>%
-        ## then turn into a factor.
-        mutate(lbl=factor(lbl))
-
-    ## label the top 32 beneficial LTEE genes with mutations in the recipients with symbols.
-    top.hit.labels <- filter(no.B.genomes, gene.annotation %in% genes.to.label$Gene.name) %>%
-        filter(lbl %in% c(2,3,4)) %>%
-        mutate(y.center=y.max-match(genome,unique(genome))*y.pad,
-               x1=rotated.position,x2=rotated.position,y1=y.center-3,y2=y.center+3)
-
-    ## reorder top.hit.labels$mut.annotation factor levels for nice plotting.
-    top.hit.labels$mut.annotation <- factor(top.hit.labels$mut.annotation, levels = c("dN", "dS", "indel", "IS-insertion", "base-substitution", "non-coding", "non-point"))
-
-    Fig.xlab <- expression(paste("Distance from ",italic("oriC")))
-
-    ## all donor mutations should be labeled as yellow.
-    panel <- ggplot(no.B.genomes, aes(x=x1,xend=x2,y=y1,yend=y2,colour=lbl)) +
-        geom_segment(size=0.05) +
-        theme_tufte() +
-        xlab(Fig.xlab) +
-        ylim(5,y.max-5) +
-        geom_point(data=top.hit.labels,aes(x=rotated.position,
-                                          y=y.center,
-                                          color=lbl,
-                                          shape=mut.annotation)) +
-        ## set the symbols this way:
-        ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
-        scale_shape_manual(values = c(1,0,2,4),name="symbol") +
-        theme(legend.position = "top") +
-        geom_label_repel(data=filter(top.hit.labels,lbl %in% c(3,4)),
-                         aes(x=rotated.position,
-                             y=y.center,
-                             fill=lbl,
-                             label=gene.annotation),
-                         fontface='italic',
-                         color='white',
-                         box.padding = unit(0.35, "lines"),
-                         point.padding = unit(0.5, "lines"),
-                         segment.color = 'grey50',
-                         size=2.5) +
-        scale_fill_manual(values=c('#d7191c'),
-                          labels=c("replaced")) +
-        guides(fill=FALSE,color=FALSE,shape=FALSE) +
-        scale_colour_manual(values=c('#ffffbf', 'black','#d7191c','#f1b6da'),
-                            name='color',
-                            labels=c("K-12","new","replaced","deleted")) +
-        scale_y_continuous(breaks=c(10,20),labels=rev(levels(no.B.genomes$genome))) +
-        ylab("Ara-3 Clone")
-    return(panel)
-}
-
-#########################
-## make Figure S5. Turner clones.
-
-FigS5 <- FigS5.function(turner.clones, genes.to.label)
-ggsave("/Users/Rohandinho/Desktop/FigS5.pdf", FigS5,width=8,height=3)
-
-REL4397.data <- turner.clones %>% select(-frequency) %>% filter(genome=='REL4397') %>%
-    select(-genome,-lineage,-reference)
-REL4398.data <- turner.clones %>% select(-frequency) %>% filter(genome=='REL4398') %>%
-    select(-genome,-lineage,-reference)
-
-## find mutations specific to each clone.
-REL4397.diffs <- setdiff(REL4397.data,REL4398.data)
-REL4398.diffs <- setdiff(REL4398.data,REL4397.data)
-
-REL4397.diffs2 <- REL4397.diffs %>% filter(mut.annotation!='dS',mut.annotation!='non-coding')
-REL4398.diffs2 <- REL4398.diffs %>% filter(mut.annotation!='dS',mut.annotation!='non-coding')
+ggsave("/Users/Rohandinho/Desktop/FigS5.pdf",FigS5)
 
