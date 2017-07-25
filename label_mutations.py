@@ -16,25 +16,18 @@
 ## 8) REL296 specific marker
 ## 9) REL298 specific marker
 
-## Usage1: python label_mutations.py REL606 1 > ../results/labeled_mutations.csv
+## Usage1: python label_mutations.py 1 > ../results/labeled_mutations.csv
 
-## Usage2: python label_mutations.py REL606 2 > ../results/K-12-differences.csv
+## Usage2: python label_mutations.py 2 > ../results/K-12-differences.csv
 
-## Usage3: python label_mutations.py REL606 3 > ../results/LTEE-recipient-markers.csv
+## Usage3: python label_mutations.py 3 > ../results/LTEE-recipient-markers.csv
 
-## Usage5: python label_mutations.py REL606 5 > ../results/poly_labeled_mutations.csv
+## Usage4: python label_mutations.py 4 > ../results/evolution-experiment/evoexp_labeled_mutations.csv
 
-## Usage6: python label_mutations.py REL606 6 > ../results/poly_LTEE-recipient-markers.csv
-##         python label_mutations.py K12 6 > ../results/K12_poly_LTEE-recipient-markers.csv
-
-## Usage7: python label_mutations.py REL606 7 > ../results/poly_donor-markers.csv
-
-## Usage8: python label_mutations.py REL606 8 > ../results/evolution-experiment/evoexp_labeled_mutations.csv
-
-## Usage9: python label_mutations.py REL606 9 > ../results/turner_clones_labeled_mutations.csv
+## Usage5: python label_mutations.py 5 > ../results/turner_clones_labeled_mutations.csv
 
 ## An R script called dissertation_analysis.R makes figures and does stats
-## using these three csv files (output of this script for 1,2,3)
+## using these csv files (output of this script for 1,2,3,4,5)
 
 ## TODO: add options that do different stages of the analysis.
 ## TODO: automate the whole pipeline with a makefile.
@@ -216,7 +209,7 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
     ## print header. lbl is used instead of label to avoid confusion with this keyword in ggplot2.
     print("lineage,genome,mut.type,reference,position,mutation,mut.annotation,gene.annotation,frequency,lbl")
 
-    donor_marker_dir = "../REL606-ref-donor-specific-markers/"
+    donor_marker_dir = "../donor-specific-markers/"
 
     REL288_gd = join(data_dir,donor_marker_dir,'annotated_REL288_specific_markers.gd')
     REL291_gd = join(data_dir,donor_marker_dir,'annotated_REL291_specific_markers.gd')
@@ -236,14 +229,6 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
     REL296_dict = {k:v for k,v in REL296_dict.items() if not v.startswith('UN')}
     REL298_dict = {k:v for k,v in REL298_dict.items() if not v.startswith('UN')}
     donor_dict = {k:v for k,v in donor_dict.items() if not v.startswith('UN')}
-
-    ## HACK TO REMOVE 'TRN10TETR' REFERENCE.
-    REL288_dict = {k:v for k,v in REL288_dict.items() if not 'TRN10TETR' in v}
-    REL291_dict = {k:v for k,v in REL291_dict.items() if not 'TRN10TETR' in v}
-    REL296_dict = {k:v for k,v in REL296_dict.items() if not 'TRN10TETR' in v}
-    REL298_dict = {k:v for k,v in REL298_dict.items() if not 'TRN10TETR' in v}
-    donor_dict = {k:v for k,v in donor_dict.items() if not 'TRN10TETR' in v}
-
 
     donor_dictz = {'REL288':REL288_dict, 'REL291':REL291_dict,'REL296':REL296_dict,'REL298':REL298_dict,'donor_intersection':donor_dict}
 
@@ -288,11 +273,6 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
             even_recombinant_dict = {k:v for k,v in even_recombinant_dict.items() if not v.startswith('UN')}
             odd_recombinant_dict = {k:v for k,v in odd_recombinant_dict.items() if not v.startswith('UN')}
 
-            ## HACK TO REMOVE 'TRN10TETR' MUTATIONS
-            recipient_dict = {k:v for k,v in recipient_dict.items() if not 'TRN10TETR' in v}
-            even_recombinant_dict = {k:v for k,v in even_recombinant_dict.items() if not 'TRN10TETR' in v}
-            odd_recombinant_dict = {k:v for k,v in odd_recombinant_dict.items() if not 'TRN10TETR' in v}
-
             label_mutations(donor_dictz, recipient_dict,odd_recombinant_dict, odd_name,l)
             label_mutations(donor_dictz, recipient_dict,even_recombinant_dict, even_name,l)
 
@@ -316,40 +296,36 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
             initial_name = get_genome_name(initial_gd)
             final_dict = parse_annotated_gd(final_gd)
             final_name = get_genome_name(final_gd)
-
+            
             ## HACK TO REMOVE 'UN' MUTATIONS
             recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
             initial_dict = {k:v for k,v in initial_dict.items() if not v.startswith('UN')}
             final_dict = {k:v for k,v in final_dict.items() if not v.startswith('UN')}
-
+            
             label_mutations(donor_dictz, recipient_dict, initial_dict, initial_name,l)
             label_mutations(donor_dictz, recipient_dict, final_dict, final_name,l)
+            
     elif analysis == 'turner_clones':
-        REL4397_gd = join(data_dir,'annotated_REL4397.gd')
-        REL4398_gd = join(data_dir,'annotated_REL4398.gd')
+        REL4397_gd = join(data_dir,'turner_clones','annotated_REL4397.gd')
+        REL4398_gd = join(data_dir,'turner_clones','annotated_REL4398.gd')
         recipient_gd = join(data_dir,'Ara-3/annotated_REL2545.gd')
         REL4397_dict = parse_annotated_gd(REL4397_gd)
         REL4398_dict = parse_annotated_gd(REL4398_gd)
         recipient_dict = parse_annotated_gd(recipient_gd)
+        
         ## HACK TO REMOVE 'UN' MUTATIONS
         REL4397_dict = {k:v for k,v in REL4397_dict.items() if not v.startswith('UN')}
         REL4398_dict = {k:v for k,v in REL4398_dict.items() if not v.startswith('UN')}
         recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
-        ## HACK TO REMOVE 'TRN10TETR' MUTATIONS
-        REL4397_dict = {k:v for k,v in REL4397_dict.items() if not 'TRN10TETR' in v}
-        REL4398_dict = {k:v for k,v in REL4398_dict.items() if not 'TRN10TETR' in v}
-        recipient_dict = {k:v for k,v in recipient_dict.items() if not 'TRN10TETR' in v}
-
         REL4397_name = get_genome_name(REL4397_gd)
         REL4398_name = get_genome_name(REL4398_gd)
-
+        
         label_mutations(donor_dictz, recipient_dict, REL4397_dict, REL4397_name,'Ara-3')
         label_mutations(donor_dictz, recipient_dict, REL4398_dict, REL4398_name,'Ara-3')
 
 
-
 def make_K12_diff_csv(data_dir):
-    donor_gd = join(data_dir,'annotated_K-12.gd')
+    donor_gd = join(data_dir,'annotated_donor_union.gd')
     donor_name = get_genome_name(donor_gd)
     donor_dict = parse_annotated_gd(donor_gd)
     ## print header.
@@ -384,68 +360,27 @@ def make_donor_csv(data_dir):
         for i in sorted(donor_dict.keys()):
             print(donor_name+','+donor_dict[i])
 
-def new_mutation_sanity_check(proj_dir,lineages,output_path,count_only_odd=True):
-    for f in listdir(output_path):
-        call(["wc", join(output_path,f)])
-    labeled_muts = open(join(proj_dir,"results/labeled_mutations.csv"))
-    new_mut_count = {x:0 for x in lineages}
-    for i,l in enumerate(labeled_muts):
-        if i == 0: ## skip the header
-            continue
-        data = l.strip().split(',')
-        my_lineage = data[0]
-        my_clone = data[1]
-        my_label = data[-1]
-        if my_label == '3': ## new mutation
-            ## in this mod expression, even clones evaluate to false
-            if count_only_odd and not int(my_clone[-1]) % 2:
-                continue
-            #print(data)
-            new_mut_count[my_lineage] += 1
-    print(new_mut_count)
-
 def main():
     proj_dir = '/Users/Rohandinho/Desktop/Projects/STLE-analysis/'
-    REL606_gd_dir = 'annotated-diffs/REL606-ref-runs'
-    REL606_poly_gd_dir = 'annotated-diffs/REL606-poly-runs'
-
-    K12_gd_dir = 'annotated-diffs/K12-ref-runs'
-    K12_poly_gd_dir = 'annotated-diffs/K12-poly-runs'
-
-    evo_exp_gd_dir = 'annotated-diffs/evol-exp-REL606-runs'
+    REL606_gd_dir = join(proj_dir,'annotated-diffs/REL606-ref-runs')
+    evo_exp_gd_dir = join(proj_dir,'annotated-diffs/evolexp')
+    donor_gd_dir = join(proj_dir,'annotated-diffs/donor-specific-markers')
 
     parser = argparse.ArgumentParser(description='options run different sections of analysis for genomes from STLE' + \
-    'that have been run through breseq using either REL606 or K-12 MG1655 as reference genomes')
-    parser.add_argument('ref_genome', type=str, help='reference genome: must be either REL606 or K12', action='store')
+    'that have been run through breseq using REL606 as reference genome')
+
     parser.add_argument('analysis_stage', type=int, help='number representing which function to do', action='store')
     args = parser.parse_args()
     if args.analysis_stage == 1:
-        if args.ref_genome == 'REL606':
-            make_ref_labeled_muts_csv(join(proj_dir,REL606_gd_dir),analysis='recombinants')
-        elif args.ref_genome == 'K12':
-            make_ref_labeled_muts_csv(join(proj_dir,K12_gd_dir),analysis='recombinants')
+        make_ref_labeled_muts_csv(REL606_gd_dir,analysis='recombinants')
     elif args.analysis_stage == 2:
-        if args.ref_genome == 'REL606':
-            make_K12_diff_csv(join(proj_dir,REL606_gd_dir))
+        make_K12_diff_csv(donor_gd_dir)
     elif args.analysis_stage == 3:
-        if args.ref_genome == 'REL606':
-            make_LTEE_marker_csv(join(proj_dir,REL606_gd_dir))
-        elif args.ref_genome == 'K12':
-            make_LTEE_marker_csv(join(proj_dir,K12_gd_dir))
+            make_LTEE_marker_csv(REL606_gd_dir)
+    elif args.analysis_stage == 4:
+        make_ref_labeled_muts_csv(evo_exp_gd_dir,analysis='evoexp')
     elif args.analysis_stage == 5:
-        make_ref_labeled_muts_csv(join(proj_dir,REL606_poly_gd_dir),analysis='recombinants')
-    elif args.analysis_stage == 6:
-        make_LTEE_marker_csv(join(proj_dir,REL606_poly_gd_dir))
-    elif args.analysis_stage == 7:
-        if args.ref_genome == 'REL606':
-            make_donor_csv(join(proj_dir,REL606_poly_gd_dir,'donors'))
-        elif args.ref_genome == 'K12':
-            make_donor_csv(join(proj_dir,K12_poly_gd_dir,'donors'))
-    elif args.analysis_stage == 8:
-        if args.ref_genome == 'REL606':
-            make_ref_labeled_muts_csv(join(proj_dir,evo_exp_gd_dir),analysis='evoexp')
-    elif args.analysis_stage == 9:
-        make_ref_labeled_muts_csv(join(proj_dir,REL606_gd_dir),analysis='turner_clones')
+        make_ref_labeled_muts_csv(REL606_gd_dir,analysis='turner_clones')
 
 
 main()

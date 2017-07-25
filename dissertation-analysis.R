@@ -422,9 +422,7 @@ FigS3.function <- function(mut.df, genes.to.label) {
     return(panel)
 }
 
-#########################
 ## make Figure S3. Turner clones.
-
 FigS3 <- FigS3.function(turner.clones, genes.to.label)
 ggsave("/Users/Rohandinho/Desktop/FigS3.pdf", FigS3,width=8,height=3)
 
@@ -663,7 +661,6 @@ odd.annotated.clone.K12.segments <- annotate.segments(odd.clone.K12.segments,K12
 
 write.csv(x=annotated.clone.K12.segments,file=file.path(K12.specific.dir,"clone.K12.segs.csv"))
 write.csv(x=annotated.fixed.K12.segments,file=file.path(K12.specific.dir,"fixed.K12.segs.csv"))
-
 
 ## This shows that IS5 transposons found in K-12 but not in REL606,
 ## as shown by a BLAST search, have introgressed into evolved genomes
