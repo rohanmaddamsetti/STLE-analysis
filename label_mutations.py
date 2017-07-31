@@ -230,6 +230,13 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
     REL298_dict = {k:v for k,v in REL298_dict.items() if not v.startswith('UN')}
     donor_dict = {k:v for k,v in donor_dict.items() if not v.startswith('UN')}
 
+    ## HACK TO REMOVE 'TRN10TETR' REFERENCE.
+    REL288_dict = {k:v for k,v in REL288_dict.items() if not 'TRN10TETR' in v}
+    REL291_dict = {k:v for k,v in REL291_dict.items() if not 'TRN10TETR' in v}
+    REL296_dict = {k:v for k,v in REL296_dict.items() if not 'TRN10TETR' in v}
+    REL298_dict = {k:v for k,v in REL298_dict.items() if not 'TRN10TETR' in v}
+    donor_dict = {k:v for k,v in donor_dict.items() if not 'TRN10TETR' in v}
+
     donor_dictz = {'REL288':REL288_dict, 'REL291':REL291_dict,'REL296':REL296_dict,'REL298':REL298_dict,'donor_intersection':donor_dict}
 
     lineages = ['Ara+1', 'Ara+2', 'Ara+3', 'Ara+4', 'Ara+5', 'Ara+6',
@@ -296,15 +303,15 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
             initial_name = get_genome_name(initial_gd)
             final_dict = parse_annotated_gd(final_gd)
             final_name = get_genome_name(final_gd)
-            
+
             ## HACK TO REMOVE 'UN' MUTATIONS
             recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
             initial_dict = {k:v for k,v in initial_dict.items() if not v.startswith('UN')}
             final_dict = {k:v for k,v in final_dict.items() if not v.startswith('UN')}
-            
+
             label_mutations(donor_dictz, recipient_dict, initial_dict, initial_name,l)
             label_mutations(donor_dictz, recipient_dict, final_dict, final_name,l)
-            
+
     elif analysis == 'turner_clones':
         REL4397_gd = join(data_dir,'turner_clones','annotated_REL4397.gd')
         REL4398_gd = join(data_dir,'turner_clones','annotated_REL4398.gd')
@@ -312,14 +319,14 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
         REL4397_dict = parse_annotated_gd(REL4397_gd)
         REL4398_dict = parse_annotated_gd(REL4398_gd)
         recipient_dict = parse_annotated_gd(recipient_gd)
-        
+
         ## HACK TO REMOVE 'UN' MUTATIONS
         REL4397_dict = {k:v for k,v in REL4397_dict.items() if not v.startswith('UN')}
         REL4398_dict = {k:v for k,v in REL4398_dict.items() if not v.startswith('UN')}
         recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
         REL4397_name = get_genome_name(REL4397_gd)
         REL4398_name = get_genome_name(REL4398_gd)
-        
+
         label_mutations(donor_dictz, recipient_dict, REL4397_dict, REL4397_name,'Ara-3')
         label_mutations(donor_dictz, recipient_dict, REL4398_dict, REL4398_name,'Ara-3')
 

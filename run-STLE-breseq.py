@@ -8,11 +8,14 @@ import os
 
 ## run breseq 0.30.2 on all samples.
 
-def run_breseq(reference_seq,myout,reads1,reads2,polymorphism=False):
+def run_breseq(reference_seq,myout,reads1,reads2,polymorphism=False,donor=False):
+    Tn10_ref = '../references/Tn10.gbk'
     if polymorphism:
         breseq_args = ['bsub', '-q', 'medium', '-W', '36:0', 'breseq', '-p', '-r', reference_seq, '-o', myout, reads1, reads2]
     else:
         breseq_args = ['bsub', '-q', 'short', '-W', '12:0', 'breseq', '-r', reference_seq, '-o', myout, reads1, reads2]
+        if donor: ## pass Tn10 transposon reference.
+            breseq_args = ['bsub', '-q', 'short', '-W', '12:0', 'breseq', '-r', reference_seq, '-r', Tn10_ref, '-o', myout, reads1, reads2]
     output_done = os.path.join(myout,'output/output.done')
     if not os.path.exists(output_done):
         print(' '.join(breseq_args))
@@ -42,7 +45,7 @@ for i,l in enumerate(data_fh):
             os.makedirs(F_plasmid_out)
         read_dir = "../read-data/combined_reads/"
         reads1, reads2 = [os.path.join(read_dir,x) for x in os.listdir(read_dir) if name+'_' in x]
-        run_breseq(ref_seq,ref_out,reads1,reads2)
+        run_breseq(ref_seq,ref_out,reads1,reads2,donor=True)
         run_breseq(F_plasmid_seq,F_plasmid_out,reads1,reads2)
     elif is_clone == '1' and generation == '0': ## recipient clone.
         ref_out = os.path.join('../breseq-assemblies/','REL606-ref-runs','recipients',name)
@@ -59,9 +62,6 @@ for i,l in enumerate(data_fh):
         F_plasmid_out = os.path.join('../breseq-assemblies/','F-plasmid-ref-runs','recombinants',name)
         if not os.path.exists(F_plasmid_out):
             os.makedirs(F_plasmid_out)
-        ## handle corner case for REL4397 and REL4398 clones (data in combined_reads).
-        if name in ('REL4397','REL4398'):
-            read_dir = "../read-data/combined_reads/"
         else:
             read_dir = "../read-data/20160120_DNASeq_PE/"
         reads1, reads2 = [os.path.join(read_dir,x) for x in os.listdir(read_dir) if name+'_' in x]

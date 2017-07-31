@@ -117,7 +117,7 @@ oriC.xlab <- expression(paste("Distance from ",italic("oriC")))
 ## Figure S1. Density of differences between K-12 and REL606.
 
 FigS1 <- ggplot(K12.diff.data, aes(x=rotated.position)) + geom_histogram(bins=556) + theme_tufte() + xlab(oriC.xlab) + ylab("Differences between K-12 and REL606")
-ggsave("/Users/Rohandinho/Desktop/FigS1.pdf",FigS1,height=3,width=4)
+ggsave("../results/figures/FigS1.pdf",FigS1,height=3,width=4)
 
 
 #############################
@@ -135,7 +135,7 @@ genes.to.label <- filter(top.G.score.genes,Gene.name %in% recipient.top.hits$gen
 Table2.df <- mutate(genes.to.label,Gene = Gene.name) %>%
     select(Gene,Start.position,Coding.length,G.score)
 
-write.csv(file="~/Desktop/Table2.csv",Table2.df)
+write.csv(file="../results/figures/Table2.csv",Table2.df)
 
 #####################################################################################
 ## Make Figure 1 and Figure 8 (LCA for STLE continuation experiment analysis).
@@ -216,10 +216,10 @@ Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
 
 ## make Figure 1 and S2.
 Fig1 <- Fig1.function(odd.genomes, genes.to.label, analysis.type='Fig1')
-ggsave("/Users/Rohandinho/Desktop/Fig1.pdf", Fig1,width=8,height=10)
+ggsave("../results/figures/Fig1.pdf", Fig1,width=8,height=10)
 
 FigS2 <- Fig1.function(even.genomes, genes.to.label, analysis.type='FigS2')
-ggsave("/Users/Rohandinho/Desktop/FigS2.pdf", FigS2,width=8,height=10)
+ggsave("../results/figures/FigS2.pdf", FigS2,width=8,height=10)
 
 
 ##############################################################################
@@ -309,7 +309,7 @@ odd.introgression.scores <- score.introgression(odd.genomes)
 ## This is only made with odd genomes at the moment.
 
 Fig2A <- makeFig2A(odd.introgression.scores,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/Fig3A.pdf",Fig2A,height=2.5,width=6)
+ggsave("../results/figures/Fig2A.pdf",Fig2A,height=2.5,width=6)
 ## NOTE: The delta does not print properly but can fix in Illustrator.
 
 ## which genes get introgressed the most? is this a sign of positive selection?
@@ -350,7 +350,7 @@ Fig2B <- ggplot(only.donor.mutations,aes(x=rotated.position,xend=rotated.positio
                                    fill=Donor.strain),inherit.aes=FALSE,size=2.5,
                     point.padding = unit(0,"lines"),color = 'white')
 
-ggsave("/Users/Rohandinho/Desktop/Fig2B.pdf",Fig2B,height=1,width=6)
+ggsave("../results/figures/Fig2B.pdf",Fig2B,height=1,width=6)
 
 ########################################
 ## Figure S3: 'Figure 1' for the Turner clones.
@@ -424,7 +424,7 @@ FigS3.function <- function(mut.df, genes.to.label) {
 
 ## make Figure S3. Turner clones.
 FigS3 <- FigS3.function(turner.clones, genes.to.label)
-ggsave("/Users/Rohandinho/Desktop/FigS3.pdf", FigS3,width=8,height=3)
+ggsave("../results/figures/FigS3.pdf", FigS3,width=8,height=3)
 
 REL4397.data <- turner.clones %>% select(-frequency) %>% filter(genome=='REL4397') %>%
     select(-genome,-lineage,-reference)
@@ -472,7 +472,7 @@ FigS4 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgressi
     geom_jitter() + ylab("Median Introgression within Bin") + xlab("K-12 Differences within Bin") +
     theme_tufte()
 
-ggsave("/Users/Rohandinho/Desktop/FigS4.pdf",FigS4,width=5,height=4)
+ggsave("../results/figures/FigS4.pdf",FigS4,width=5,height=4)
 
 
 ####################################################################################################
@@ -734,7 +734,7 @@ deleted.marker.summary <- full_join(total.LTEE.markers,K12.deleted.markers) %>% 
 
 donor.and.deleted.markers <- full_join(all.chunk.summary,deleted.marker.summary)
 ## write table to file for Rich to look at.
-write.csv(donor.and.deleted.markers,"/Users/Rohandinho/Desktop/percent-greens-in-donor.csv")
+write.csv(donor.and.deleted.markers,"../results/figures/percent-greens-in-donor.csv")
 
 ##############################
 ## Make Figure 4 (chunk length distributions)
@@ -755,7 +755,7 @@ Fig4 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins
     theme(strip.background=element_blank()) +
     theme(panel.grid.minor.x=element_line(color='grey90',linetype="dashed"))
 
-ggsave("/Users/Rohandinho/Desktop/Fig4.pdf",Fig4,width=4,height=7)
+ggsave("../results/figures/Fig4.pdf",Fig4,width=4,height=7)
 
 ## STATISTICAL TEST:
 ## are the distributions of K-12 chunks (or LTEE chunks)
@@ -790,7 +790,7 @@ recomb.mut.ratio.table <- filter(labeled.mutations,mut.annotation=='dS') %>%
     mutate(dS.r.over.m.ratio=tot.recomb.dS/tot.new.dS) %>%
     mutate(event.r.over.m.ratio=recombination.events/tot.new.dS)
 
-write.csv(recomb.mut.ratio.table,"../results/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
+write.csv(recomb.mut.ratio.table,"../results/figures/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
 
 ####################################################################################################
 ## Figure 5. Ara-3 clones have the F-plasmid.
@@ -823,7 +823,7 @@ Fig5C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Cl
 
 ## arrange panes with cowplot.
 Fig5 <- plot_grid(Fig5A, Fig5B, Fig5C, labels = c("A", "B", "C"), ncol = 1)
-save_plot("~/Desktop/Fig5.pdf", Fig5, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
+save_plot("../results/figures/Fig5.pdf", Fig5, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
 
 ## clean up memory.
 rm(Fig5.data,Fig5A.data,Fig5B.data,Fig5C.data)
@@ -833,7 +833,7 @@ rm(Fig5.data,Fig5A.data,Fig5B.data,Fig5C.data)
 donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summarise(count=n())
 
 Fig6 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif")) + guides(fill=FALSE)
-ggsave("/Users/Rohandinho/Desktop/Fig6.pdf",Fig6,width=6,height=4)
+ggsave("../results/figures/Fig6.pdf",Fig6,width=6,height=4)
 
 ###############################################################################################
 ## Analyze evolution experiment results.
@@ -892,12 +892,12 @@ make.Fig7 <- function(K12.evoexp.data) {
 }
 
 Fig7 <- make.Fig7(K12.evoexp.data)
-ggsave("/Users/Rohandinho/Desktop/Fig7.pdf",Fig7,width=7.5,height=7.5)
+ggsave("../results/figures/Fig7.pdf",Fig7,width=7.5,height=7.5)
 
 ## make the same figure, but for 'new' mutations (lbl==3).
 new.evoexp.data <- filter(evoexp.data,lbl==3)
 new.plot <- make.Fig7(new.evoexp.data)
-ggsave("/Users/Rohandinho/Desktop/new.cluster.pdf",new.plot,width=7.5,height=7.5)
+ggsave("../results/figures/new_mut_Fig7.pdf",new.plot,width=7.5,height=7.5)
 ## This plot shows an extremely strong correlation between K-12 mutations and 'new'
 ## mutations. The best interpretation is that 'new' mutations are introduced by
 ## recombination, either by gene conversion, or by K-12 reads mapping to
@@ -914,11 +914,8 @@ non.fixed.erasures <- replaced.evoexp.mutations %>% filter(final.freq != 1 & ini
 
 ## Is there evidence of new mutations compensating for replaced beneficial LTEE mutations?
 top.fixed.erasures <- filter(fixed.erasures,gene.annotation %in% genes.to.label$Gene.name)
-new.replacements <- filter(evoexp.data,gene.annotation %in% top.fixed.erasures$gene.annotation)
-new.replacements2 <- filter(new.replacements,final.freq==1,mut.annotation=='dN')
-################################################################TODO!!!! FINISH THIS ANALYSIS!!!
-
-## filter out mutations also in the recombinant clones.
+new.replacements <- filter(evoexp.data,lbl==3) %>% filter(gene.annotation %in% top.fixed.erasures$gene.annotation)
+## answer: not really, beyond what's on Fig. 8!! I think that's pretty crazy.
 
 ##    Do K-12/new mutations that reached very high frequency (near fixation)
 ##    or very low frequency (near extinction) during the STLE continuation reject
@@ -1041,13 +1038,13 @@ inferred.LCA <- mutate(evoexp.clone.intersection,
 ## For the LCA picture, only plot mutations in A & B (found in both clones and initial.freq=1 & final.freq=1)
 
 Fig8 <- Fig1.function(inferred.LCA,genes.to.label,analysis.type='evoexpLCA')
-ggsave("/Users/Rohandinho/Desktop/Fig8.pdf", Fig8,width=8,height=10)
+ggsave("../results/figures/Fig8.pdf", Fig8,width=8,height=10)
 
 scored.LCA <- score.introgression(inferred.LCA)
 LCA.introgressed.genes <- get.introgressed.genes(scored.LCA)
 
 Fig9 <- makeFig3(scored.LCA,auxotrophs,hfrs)
-ggsave("/Users/Rohandinho/Desktop/Fig9.pdf",Fig9,height=2.5,width=6)
+ggsave("../results/figures/Fig9.pdf",Fig9,height=2.5,width=6)
 ## NOTE: fix delta symbol in Illustrator.
 
 ########################################
@@ -1062,4 +1059,4 @@ FigS5 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1)
     guides(color=FALSE) +
     facet_grid(Lineage ~ Generation,labeller=labeller(Generation = c('1000'='Generation 1000','1200'='Generation 1200')))
 
-ggsave("/Users/Rohandinho/Desktop/FigS5.pdf",FigS5)
+ggsave("../results/figures/FigS5.pdf",FigS5)
