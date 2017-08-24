@@ -5,7 +5,7 @@ annotate-gds.py by Rohan Maddamsetti.
 
 Run this script before running label_mutations.py.
 
-If running on orchestra, make sure to module load seq/breseq/0.30.2 and source activate evcouplings_env.
+If running on orchestra, make sure to module load seq/breseq/0.31.0 and source activate evcouplings_env.
 
 This script annotates output.gd files and puts in a nice directory structure for
 label_mutations.py to work on.
@@ -46,10 +46,7 @@ def annotate_gds(indir,outdir,name,population,is_donor=False):
     if os.path.exists(outfile):
         print("skipping: ",outfile,"exists")
         return
-    if is_donor: ## give Tn10 reference as well.
-        orch_annotate_args = ['bsub', '-q', 'short','-W','6:0', 'gdtools', 'ANNOTATE', '-f', 'GD', '-r', '../references/REL606.7.gbk', '-r', '../references/Tn10.gbk', '-o', outfile, infile]
-    else:
-        orch_annotate_args = ['bsub', '-q', 'short','-W','6:0', 'gdtools', 'ANNOTATE', '-f', 'GD', '-r', '../references/REL606.7.gbk', '-o', outfile, infile]
+    orch_annotate_args = ['bsub', '-q', 'short','-W','6:0', 'gdtools', 'ANNOTATE', '-f', 'GD', '-r', '../references/REL606.7.gbk', '-r', '../references/Tn10.gbk', '-r', '../references/F-plasmid.1.gbk', '-o', outfile, infile]
     subprocess.run(orch_annotate_args)
     print(' '.join(orch_annotate_args))
 

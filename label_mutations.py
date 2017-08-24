@@ -1,37 +1,36 @@
 #!/usr/bin/env python
 
-## label_mutations.py by Rohan Maddamsetti.
+'''
+label_mutations.py by Rohan Maddamsetti.
 
-## This script generates a csv file from annotated genome diff files.
-## It labels mutations in recombinant genomes from the end of the Souza-Turner
-## experiment as being
-## 0) reference genome state.
-## 1) B/K-12 marker is present that is not in reference genome (yellow)
-## 2) LTEE recipient mutations (red)
-## 3) new mutations (black)
-## 4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
-## 5) deleted markers (marker falls in a deleted region).
-## 6) REL288 specific marker
-## 7) REL291 specific marker
-## 8) REL296 specific marker
-## 9) REL298 specific marker
+This script generates a csv file from annotated genome diff files.
+It labels mutations in recombinant genomes from the end of the Souza-Turner
+experiment as being
+0) reference genome state.
+1) B/K-12 marker is present that is not in reference genome (yellow)
+2) LTEE recipient mutations (red)
+3) new mutations (black)
+4) LTEE recipient mutations that were erased by K-12 or otherwise missing (green)
+5) deleted markers (marker falls in a deleted region).
+6) REL288 specific marker
+7) REL291 specific marker
+8) REL296 specific marker
+9) REL298 specific marker
 
-## Usage1: python label_mutations.py 1 > ../results/labeled_mutations.csv
+Usage1: python label_mutations.py 1 > ../results/labeled_mutations.csv
 
-## Usage2: python label_mutations.py 2 > ../results/K-12-differences.csv
+Usage2: python label_mutations.py 2 > ../results/K-12-differences.csv
 
-## Usage3: python label_mutations.py 3 > ../results/LTEE-recipient-markers.csv
+Usage3: python label_mutations.py 3 > ../results/LTEE-recipient-markers.csv
 
-## Usage4: python label_mutations.py 4 > ../results/evolution-experiment/evoexp_labeled_mutations.csv
+Usage4: python label_mutations.py 4 > ../results/evoexp_labeled_mutations.csv
 
-## Usage5: python label_mutations.py 5 > ../results/turner_clones_labeled_mutations.csv
+Usage5: python label_mutations.py 5 > ../results/turner_clones_labeled_mutations.csv
 
-## An R script called dissertation_analysis.R makes figures and does stats
-## using these csv files (output of this script for 1,2,3,4,5)
+An R script called dissertation_analysis.R makes figures and does stats
+using these csv files (output of this script for 1,2,3,4,5)
 
-## TODO: add options that do different stages of the analysis.
-## TODO: automate the whole pipeline with a makefile.
-## TODO: get rid of unnecessary code.
+'''
 
 import argparse
 from os.path import join, basename, exists
@@ -71,6 +70,15 @@ def parse_annotated_gd(gdfile):
         ref_genome = data[3]
         ref_position = data[4]
         mutation = data[5]
+
+        ## skip mutations that don't correspond to REL606 reference (such as mutations
+        ## in the Tn10 transposon or the F-plasmid.)
+        if ref_genome != 'REL606':
+            continue
+        ## skip 'UN' mutations.
+        if mut_type == 'UN':
+            continue
+
         ## frequency column is printed even in consensus mode.
         frequency = get_annotation_from_field(data,"frequency")
         ## we want to get the annotation of which genes (or intergenic region)
@@ -103,7 +111,7 @@ def parse_annotated_gd(gdfile):
             mut_annotation = "non-point"
 
         all_annotation = [mut_type,ref_genome,ref_position,mutation, mut_annotation, gene_annotation,frequency]
-        ## Handle annotation for mutations of type 'UN':
+        ## Turn any missing annotation into NA (i.e. if frequency not donor diffs).
         all_annotation = [x if x is not None else 'NA' for x in all_annotation]
         gd_dict[int(ref_position)] = ','.join(all_annotation)
     return gd_dict
@@ -223,20 +231,6 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
     REL298_dict = parse_annotated_gd(REL298_gd)
     donor_dict = parse_annotated_gd(donor_intersection_gd)
 
-    ## HACK TO REMOVE 'UN' MUTATIONS
-    REL288_dict = {k:v for k,v in REL288_dict.items() if not v.startswith('UN')}
-    REL291_dict = {k:v for k,v in REL291_dict.items() if not v.startswith('UN')}
-    REL296_dict = {k:v for k,v in REL296_dict.items() if not v.startswith('UN')}
-    REL298_dict = {k:v for k,v in REL298_dict.items() if not v.startswith('UN')}
-    donor_dict = {k:v for k,v in donor_dict.items() if not v.startswith('UN')}
-
-    ## HACK TO REMOVE 'TRN10TETR' REFERENCE.
-    REL288_dict = {k:v for k,v in REL288_dict.items() if not 'TRN10TETR' in v}
-    REL291_dict = {k:v for k,v in REL291_dict.items() if not 'TRN10TETR' in v}
-    REL296_dict = {k:v for k,v in REL296_dict.items() if not 'TRN10TETR' in v}
-    REL298_dict = {k:v for k,v in REL298_dict.items() if not 'TRN10TETR' in v}
-    donor_dict = {k:v for k,v in donor_dict.items() if not 'TRN10TETR' in v}
-
     donor_dictz = {'REL288':REL288_dict, 'REL291':REL291_dict,'REL296':REL296_dict,'REL298':REL298_dict,'donor_intersection':donor_dict}
 
     lineages = ['Ara+1', 'Ara+2', 'Ara+3', 'Ara+4', 'Ara+5', 'Ara+6',
@@ -275,11 +269,6 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
             even_recombinant_dict = parse_annotated_gd(even_recombinant_gd)
             even_name = rel_name[get_genome_name(even_recombinant_gd)]
 
-            ## HACK TO REMOVE 'UN' MUTATIONS
-            recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
-            even_recombinant_dict = {k:v for k,v in even_recombinant_dict.items() if not v.startswith('UN')}
-            odd_recombinant_dict = {k:v for k,v in odd_recombinant_dict.items() if not v.startswith('UN')}
-
             label_mutations(donor_dictz, recipient_dict,odd_recombinant_dict, odd_name,l)
             label_mutations(donor_dictz, recipient_dict,even_recombinant_dict, even_name,l)
 
@@ -287,10 +276,13 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
         for l in lineages:
             lineage_dir = join(data_dir,l)
             lineage_diffs = [x for x in listdir(lineage_dir) if x.endswith('.gd')]
+            ## VERY CHEAP HACK FOR NOW TO GET RECIPIENT FROM REL606-ref-runs:
+            my_recipient = [x for x in listdir(join(data_dir,"../REL606-ref-runs",l)) if x.endswith('.gd') and 'REL25' in x][0]
+            recipient_gd = join(data_dir,"../REL606-ref-runs",l,my_recipient)
+            lineage_diffs = [x for x in listdir(lineage_dir) if x.endswith('.gd')]
+
             for x in lineage_diffs:
-                if 'REL25' in x:
-                    recipient_gd = join(lineage_dir,x)
-                elif 'RM3-149' in x:
+                if 'RM3-149' in x:
                     initial_gd = join(lineage_dir,x)
                 elif 'RM3-153' in x:
                     final_gd = join(lineage_dir,x)
@@ -304,11 +296,6 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
             final_dict = parse_annotated_gd(final_gd)
             final_name = get_genome_name(final_gd)
 
-            ## HACK TO REMOVE 'UN' MUTATIONS
-            recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
-            initial_dict = {k:v for k,v in initial_dict.items() if not v.startswith('UN')}
-            final_dict = {k:v for k,v in final_dict.items() if not v.startswith('UN')}
-
             label_mutations(donor_dictz, recipient_dict, initial_dict, initial_name,l)
             label_mutations(donor_dictz, recipient_dict, final_dict, final_name,l)
 
@@ -320,10 +307,6 @@ def make_ref_labeled_muts_csv(data_dir,analysis='recombinants'):
         REL4398_dict = parse_annotated_gd(REL4398_gd)
         recipient_dict = parse_annotated_gd(recipient_gd)
 
-        ## HACK TO REMOVE 'UN' MUTATIONS
-        REL4397_dict = {k:v for k,v in REL4397_dict.items() if not v.startswith('UN')}
-        REL4398_dict = {k:v for k,v in REL4398_dict.items() if not v.startswith('UN')}
-        recipient_dict = {k:v for k,v in recipient_dict.items() if not v.startswith('UN')}
         REL4397_name = get_genome_name(REL4397_gd)
         REL4398_name = get_genome_name(REL4398_gd)
 
@@ -368,10 +351,9 @@ def make_donor_csv(data_dir):
             print(donor_name+','+donor_dict[i])
 
 def main():
-    proj_dir = '/Users/Rohandinho/Desktop/Projects/STLE-analysis/'
-    REL606_gd_dir = join(proj_dir,'annotated-diffs/REL606-ref-runs')
-    evo_exp_gd_dir = join(proj_dir,'annotated-diffs/evolexp')
-    donor_gd_dir = join(proj_dir,'annotated-diffs/donor-specific-markers')
+    REL606_gd_dir = '../annotated-diffs/REL606-ref-runs'
+    evo_exp_gd_dir = '../annotated-diffs/evoexp'
+    donor_gd_dir = '../annotated-diffs/donor-specific-markers'
 
     parser = argparse.ArgumentParser(description='options run different sections of analysis for genomes from STLE' + \
     'that have been run through breseq using REL606 as reference genome')

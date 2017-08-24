@@ -3,6 +3,8 @@
 '''
 F-plasmid-search.py by Rohan Maddamsetti.
 
+Run this on orchestra! source activate evcouplings_env first.
+
 This script writes out csv files of F plasmid coverage for clones and
 for evolution experiment samples. Graphs of these data are made in
 dissertation-analysis.R.
@@ -19,8 +21,7 @@ def make_STLE_clone_coverage_df():
     evolution experiment data, due to the different directory stucture.
     '''
 
-    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-    stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
+    stle_dir = "../breseq-assemblies/REL606-ref-runs/"
 
     lineage_dict = {'REL288':'Donor', 'REL291':'Donor','REL296':'Donor','REL298':'Donor',
                     'REL2537':'Ara+1', 'REL2538':'Ara+2',
@@ -84,8 +85,9 @@ def make_STLE_clone_coverage_df():
     return df
 
 def make_evolexp_coverage_df():
-    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-    coverage_dir = join(projdir,"breseq-assemblies/evolution-experiment/F-plasmid-coverage/")
+
+    stle_dir = "../breseq-assemblies/evoexp-polymorphism/"
+
     lineage_dict = {
         'RM3-149-1':'Ara+1',
         'RM3-149-2':'Ara+2',
@@ -145,11 +147,11 @@ def make_evolexp_coverage_df():
     unique_cov_col = []
     position_col = []
 
-    for l in [x for x in listdir(coverage_dir) if x.endswith(".tab")]:
+    for l in [x for x in listdir(stle_dir) if not x.startswith(".")]:
         my_strain = l.split('_')[0] ## cheap string hack
         my_lineage = lineage_dict[my_strain]
         my_generation = generation_dict[my_strain]
-        coverage_f = join(coverage_dir,l)
+        coverage_f = join(stle_dir,l,"08_mutation_identification/NC_002483.coverage.tab")
         coverage_fh = open(coverage_f)
         for i, line in enumerate(coverage_fh):
             if i == 0:
@@ -171,13 +173,13 @@ def make_evolexp_coverage_df():
 
 def main():
 
-    projdir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
-    stle_dir = join(projdir,"breseq-assemblies/F-plasmid-ref-runs/")
+    ## assert that current working directory is STLE-analysis/src.
+    assert getcwd().endswith('STLE-analysis/src')
+    projdir = ".."
     outdir = join(projdir,"results/F-plasmid-search")
 
     df = make_STLE_clone_coverage_df()
     df2 = make_evolexp_coverage_df()
-    df3 = make_fig10_df()
 
     ## write clone coverage to csv.
     df.to_csv(join(projdir,"results/STLE-clone-F-coverage.csv"))

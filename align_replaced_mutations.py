@@ -8,9 +8,6 @@
 
 For each lineage (using odd recombinant genomes) count the number of replaced
 mutations in each class, and make a figure.
-
-perhaps make the in-depth figure for Ara+1 and Ara-4 here with seaborn?
-
 '''
 
 from os.path import join, basename, exists
@@ -19,6 +16,8 @@ import sys
 from pprint import pprint
 from copy import deepcopy
 import subprocess
+import argparse
+
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -30,11 +29,6 @@ from Bio.Align import MultipleSeqAlignment
 from Bio.Align.Applications import MafftCommandline as MAFFT
 from io import StringIO
 from Bio import AlignIO
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 def get_gene_and_201bp_upstream(genefeature,genomeseq):
     mystart = genefeature.location.start
@@ -120,10 +114,12 @@ def setup_blastdbs():
         chdir(join(cur_dir,'blast_dbs'))
         ## first, run gdtools ANNOTATE to make recipient.fasta and recombinant.fasta.
         refgenome = join(projdir,'references/REL606.7.gbk')
+        refF = join(projdir,'references/F-plasmid.1.gbk')
+        refTn10 = join(projdir,'references/Tn10.gbk')
         cur_gdpath = join(projdir,'annotated-diffs/REL606-ref-runs/',p)
         cur_recipient = join(cur_gdpath,'annotated_' + recipient_dict[p] +'.gd')
         cur_recombinant = join(cur_gdpath,'annotated_' + odd_recombinant_dict[p] + '.gd')
-        partial_args = ['gdtools','APPLY','-r',refgenome,'-f','FASTA','-o']
+        partial_args = ['gdtools','APPLY','-r',refgenome,'-r',refF, '-r',refTn10,'-f','FASTA','-o']
         if not exists("recipient.fasta"):
             subprocess.run(partial_args + ["recipient.fasta", cur_recipient])
         if not exists("recombinant.fasta"):
@@ -217,7 +213,7 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
                            db=this_db,
                            out=this_blast_out,
                            outfmt=5,
-                           max_target_seqs=1,)
+                           max_target_seqs=1)
                 ## run BLASTN.
                 this_blast()
                 ## Now parse the output to finish populating the fields in alignment_dict.
@@ -256,13 +252,12 @@ def make_alignments(upstream_bool=False,make_protein_aln=False):
     ##in REL606 that is preserved in the recipient, but not in K12 or the recombinant clone.
     return msa_dict
 
-def make_msa_dict(protein_aln=False):
+def make_msa_dict(proj_dir,protein_aln=False):
     '''
     input: a directory containing aligned sequences.
     output: a dictionary containing the MSA.
 '''
     msa_dict = {}
-    proj_dir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
     if protein_aln:
         mafft_out = join(proj_dir,"results/replaced-alignments/protein-mafft-output")
     else:
@@ -317,7 +312,6 @@ def count_aln_type(msa_dict):
 
     if the sequence in REL606 and K-12 is identical, mark as REL606 state (ancestral state).
 
-    make a nice figure with seaborn.
 '''
     aln_type_count = {'REL606':0,'Recipient':0,'K-12':0,'New':0,'REL606/K-12':0}
 
@@ -370,39 +364,39 @@ def count_aln_type(msa_dict):
 
     print(aln_type_count)
 
-    df = pd.DataFrame( { 'Lineage' : lineage_col,
-                         'Gene' :  gene_col,
-                         'Allele type' : allele_type_col })
-
-    ## make stacked bar charts with seaborn.
-    sns.set(style="whitegrid")
-
 def main():
 
-    ## Usage: python align_replaced_mutations.py
-    proj_dir = "/Users/Rohandinho/Desktop/Projects/STLE-analysis/"
+    ## Usage: python align_replaced_mutations.py 3
+    parser = argparse.ArgumentParser(description='print alignments for replaced mutations.')
+    parser.add_argument('aln_print_mode', type=int,help='number representing how to print alignment')
+    args = parser.parse_args()
+    if args.aln_print_mode not in (1,2,3):
+        print("error:print mode must be 1, 2, or 3")
+        quit()
+
+    proj_dir = "../"
     fasta_base = join(proj_dir,"results/replaced-alignments/")
 
     setup_blastdbs()
 
     prot_mafft_outdir = join(fasta_base,'protein-mafft-output')
     if exists(prot_mafft_outdir) and listdir(prot_mafft_outdir):
-        prot_dict = make_msa_dict(protein_aln=True)
+        prot_dict = make_msa_dict(proj_dir,protein_aln=True)
     else:
         prot_dict = make_alignments(upstream_bool=False,make_protein_aln=True)
 
-    print_alns(prot_dict,1)
+    print_alns(prot_dict,args.aln_print_mode)
     count_aln_type(prot_dict)
 
     dna_mafft_outdir = join(fasta_base,'dna-mafft-output')
     if exists(dna_mafft_outdir) and listdir(dna_mafft_outdir):
-        dna_dict = make_msa_dict(protein_aln=False)
+        dna_dict = make_msa_dict(proj_dir, protein_aln=False)
     else:
-        dna_dict = make_alignments(upstream_bool=False,make_protein_aln=False)
+        dna_dict = make_alignments(upstream_bool=True,make_protein_aln=False)
 
-    ## This is commented out because we're interested in the prot_dict.
-    ##print_alns(dna_dict,2)
-    ##count_aln_type(dna_dict)
+    ## now for DNA world as well. Include bp upstream.
+    print_alns(dna_dict,args.aln_print_mode)
+    count_aln_type(dna_dict)
 
 
 main()

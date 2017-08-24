@@ -2,29 +2,13 @@
 
 ## This script makes figures and does statistics for the recombinant genome analysis.
 
-## go through these imports and figure out which ones are superfluous.
-library(xml2)
-library(roxygen2)
-library(assertthat)
-library(IRanges)
-library(GenomicRanges)
-library(genbankr)
-
-library(purrr)       ## consistent & safe list/vector munging
-library(tidyr)       ## consistent data.frame cleaning
 library(ggplot2)     ## base plots are for Coursera professors
-library(scales)      ## pairs nicely with ggplot2 for plot label formatting
-library(gridExtra)   ## a helper for arranging individual ggplot objects
 library(ggthemes)    ## has a clean theme for ggplot2
-library(viridis)
-library(DT)          ## prettier data.frame output
-library(data.table)  ## faster fread()
+library(viridis)     ## nice color scheme.
 library(dplyr)       ## consistent data.frame operations.
-library(dtplyr)      ## dplyr works with data.table now.
 library(ggrepel)     ## plot labeled scatterplots.
-library(splines)     ## for Figure 3.
-library(cowplot)     ## for Figure 6.
-library(zoo)
+library(splines)     ## for Figure 2.
+library(cowplot)     ## for Figure 5.
 
 ## A reminder to what the labels are.
 ## 0) reference genome state.
@@ -83,7 +67,7 @@ is.odd <- sapply(genome.names, function(x) ifelse(strtoi(substr(x,nchar(x),nchar
 labeled.mutations <- mutate(labeled.mutations,odd=is.odd[genome])
 
 ## evolution experiment data.
-evoexp.labeled.mutations <- tbl_df(read.csv("../results/evolution-experiment/evoexp_labeled_mutations.csv")) %>%
+evoexp.labeled.mutations <- tbl_df(read.csv("../results/evoexp_labeled_mutations.csv")) %>%
     mutate(lbl=as.factor(lbl)) %>% mutate(rotated.position=rotate.chr(position))
 
 ## differences between K-12 and REL606.
@@ -184,6 +168,7 @@ Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
         ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
         scale_shape_manual(values = c(1,0,2,4),name="symbol") +
         theme(legend.position = "top") +
+        theme(text=element_text(size=15)) +
         geom_label_repel(data=filter(top.hit.labels,lbl %in% c(3,4)),
                          aes(x=rotated.position,
                              y=y.center,
@@ -191,14 +176,14 @@ Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
                              label=gene.annotation),
                          fontface='italic',
                          color='white',
-                         box.padding = unit(0.35, "lines"),
-                         point.padding = unit(0.5, "lines"),
+                         box.padding = unit(0.5, "lines"),
+                         point.padding = unit(0.8, "lines"),
                          segment.color = 'grey50',
-                         size=2.5) +
+                         size=3) +
         scale_fill_manual(values=c('black','#d7191c'),
                           labels=c("new","replaced")) +
         guides(fill=FALSE,shape=FALSE,color=FALSE) +
-        scale_colour_manual(values=c('#ffffbf', '#abd9e9', 'black','#d7191c','#f1b6da'),
+        scale_colour_manual(values=c('#ffdf00', '#2b8cbe', 'black','#d7191c','#f1b6da'),
                             name='color',
                             labels=c("K-12","LTEE","new","replaced","deleted")) +
         scale_y_continuous(breaks=c(10,20,30,40,50,60,70,80,90,100,110,120),labels=rev(levels(no.B.genomes$lineage)))
@@ -213,7 +198,6 @@ Fig1.function <- function(mut.df, genes.to.label, analysis.type='Fig1') {
     return(panel)
 }
 
-
 ## make Figure 1 and S2.
 Fig1 <- Fig1.function(odd.genomes, genes.to.label, analysis.type='Fig1')
 ggsave("../results/figures/Fig1.pdf", Fig1,width=8,height=10)
@@ -221,13 +205,13 @@ ggsave("../results/figures/Fig1.pdf", Fig1,width=8,height=10)
 FigS2 <- Fig1.function(even.genomes, genes.to.label, analysis.type='FigS2')
 ggsave("../results/figures/FigS2.pdf", FigS2,width=8,height=10)
 
-
 ##############################################################################
-## Figures 2, 6, and S3.
+## Figures 2, 5, and S3.
 donor.mutations <- filter(labeled.mutations,lbl == 6 | lbl==7 | lbl == 8 | lbl == 9) %>%
     mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
+    arrange(genome) %>%
     ## reorder factor for plotting.
-    mutate(genome=factor(genome,levels=levels(genome)[c(12:21,1:11)])) %>%
+    mutate(genome=factor(genome,levels=levels(genome)[c(11:18,1:10)])) %>%
     select(-frequency) %>%
     arrange(genome,position) %>%
     distinct(genome, position, .keep_all = TRUE)
@@ -400,6 +384,7 @@ FigS3.function <- function(mut.df, genes.to.label) {
         ## dN:open circle, dS:open square, indel:open triangle, IS-insertion: an 'x'.
         scale_shape_manual(values = c(1,0,2,4),name="symbol") +
         theme(legend.position = "top") +
+        theme(text=element_text(size=15)) +
         geom_label_repel(data=filter(top.hit.labels,lbl %in% c(3,4)),
                          aes(x=rotated.position,
                              y=y.center,
@@ -407,14 +392,14 @@ FigS3.function <- function(mut.df, genes.to.label) {
                              label=gene.annotation),
                          fontface='italic',
                          color='white',
-                         box.padding = unit(0.35, "lines"),
-                         point.padding = unit(0.5, "lines"),
+                         box.padding = unit(0.5, "lines"),
+                         point.padding = unit(0.8, "lines"),
                          segment.color = 'grey50',
-                         size=2.5) +
+                         size=3) +
         scale_fill_manual(values=c('#d7191c'),
                           labels=c("replaced")) +
         guides(fill=FALSE,color=FALSE,shape=FALSE) +
-        scale_colour_manual(values=c('#ffffbf', 'black','#d7191c','#f1b6da'),
+        scale_colour_manual(values=c('#ffdf00', 'black','#d7191c','#f1b6da'),
                             name='color',
                             labels=c("K-12","new","replaced","deleted")) +
         scale_y_continuous(breaks=c(10,20),labels=rev(levels(no.B.genomes$genome))) +
@@ -459,7 +444,7 @@ introgression.vs.divergence.data <- left_join(K12.diff.data,odd.introgression.sc
 two.classed.introgression.data <- introgression.vs.divergence.data %>%
     summarize(introgression=ifelse(mean(introgression.score)>0,1,0),divergence=n())
 
-## no difference in divergence between regions with and without introgression. p = 0.8756.
+## no difference in divergence between regions with and without introgression. p = 0.9091.
 kruskal.test(divergence ~ introgression,data=two.classed.introgression.data)
 
 median.introgression.data <- introgression.vs.divergence.data %>%
@@ -474,79 +459,28 @@ FigS4 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgressi
 
 ggsave("../results/figures/FigS4.pdf",FigS4,width=5,height=4)
 
-
-####################################################################################################
+##############################################################################
 ## Replaced mutations. Table 3 and Figure 3 (Fig. 3 is made separately).
 
-#### Make in-depth alignments of all replaced mutations, with special attention to Ara+1 and Ara-4.
+#### Make in-depth alignments of replaced mutations, with special attention to Ara+1 and Ara-4.
 #### Print out a csv of genes for align_replaced_mutations.py to align,
 #### and annotate as 0) reversion to pre-LTEE state, 1) K-12 state, 3) new allele.
 
 #### Only look at dN mutations in odd REL clones.
+#### Filter out ECB_00025, this is a 'conserved hypothetical protein'
+#### without a homolog in K-12.
 replaced.gene.list <- filter(labeled.mutations,lbl==4,mut.annotation=='dN',odd==TRUE) %>%
-    #select(gene.annotation,lineage,genome) %>%
-    group_by(lineage,genome) %>% distinct(gene.annotation)
+    group_by(lineage,genome) %>% distinct(gene.annotation) %>%
+    filter(gene.annotation!='ECB_00025')
 write.csv(replaced.gene.list,"../results/align_these.csv",row.names=FALSE,quote=FALSE)
 
-## Run pythonw align_replaced_mutations.py to get results for Table 3 in the paper,
-## as well as the numbers in this section of the manuscript.
-## 31 of the 61 replaced dN are in non-mutators, and these are shown in Table 3.
-
-################################
-## Table 4: Putative gene conversion events.
-## Started by looking for parallelism in new mutations: super strong parallelism (multiple new mutations in the same
-## gene is probably gene conversion or something.
-
-## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
-new.odd.mutations <- filter(odd.genomes,lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>% filter(lbl=='3')
-
-## First: filter out cases when 3 or more new mutations occur in the same gene in the same odd-numbered genome
-## (most likely not a new mutation).
-
-gene.convs <- group_by(new.odd.mutations,lineage) %>% group_by(gene.annotation) %>% filter(n()>=3)
-rest.new.odd.mutations <- group_by(new.odd.mutations,lineage) %>% group_by(gene.annotation) %>% filter(n()<3)
-
-gene.convs.summary <- group_by(gene.convs,gene.annotation) %>% summarize(uniq.lineage=length(unique(lineage)),mutcount=length(gene.annotation) ,total.pos=length(unique(position)))
-
-## There seems to be a relationship between number of new mutations...and number of deleted LTEE markers?
-## remember that this is only looking at non-mutators.
-rest.new.muts.summary <- group_by(rest.new.odd.mutations,gene.annotation) %>% summarize(lineages=length(unique(lineage)),mutcount=length(gene.annotation),total.pos=length(unique(position)))
-
-rest.new.muts.lineage.summary <- group_by(rest.new.odd.mutations,lineage) %>% summarize(mutcount=n())
-
-deleted.odd.mutations <- filter(odd.genomes,lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>% filter(lbl=='4')
-
-deleted.muts.lineage.summary <- group_by(deleted.odd.mutations,lineage) %>% summarize(deletedcount=n())
-
-## can't conclude that new mutations due to mutagenesis--strong signal of selection!!
-rest.new.odd.G.score <- filter(G.score.data, Gene.name %in% rest.new.odd.mutations$gene.annotation)
-rest.new.odd.G.score.summary <- summarize(rest.new.odd.G.score,mean.G.score=mean(G.score))
-## mean G-score is 13!
-gene.convs.G.score <- filter(G.score.data, Gene.name %in% gene.convs$gene.annotation)
-gene.convs.G.score.summary <- summarize(gene.convs.G.score,mean.G.score=mean(G.score))
-## while mean G-score is 0.42 for the 'gene conversion events'.
-
-t.test(rest.new.odd.G.score$G.score,gene.convs.G.score$G.score)
-
-## how many new mutations occur in top G.score genes?
-top.G.score.genes <- filter(G.score.data,G.score>8.9)
-top.new.odd.mutations <- filter(new.odd.mutations,gene.annotation %in% top.G.score.genes$Gene.name)
-## All in Ara+1 or Ara-4! Does this mean that because these had mutations removed, they get bigger beneficial mutations?
-## also note that Ara-4 lost a pykF allele and picked up a different pykF allele!
-## lets rank rest.new.odd.mutations by G.score.
-## there's a better join that this so that I don't have to set all the columns to NULL but whatever.
-G.score.temp <- mutate(G.score.data,gene.annotation=Gene.name,Gene.name=NULL,Observed.nonsynonymous.mutation=NULL,
-                       Expected.nonsynonymous.mutation=NULL,Synonymous.mutation=NULL, Intergenic.point.mutation=NULL,
-                       Point.mutation.in.pseudogene.or.noncoding.gene=NULL,IS.insertion=NULL,Short.indel=NULL,
-                       Large.deletion=NULL, Long.duplication=NULL,
-                       Total.mutations=NULL, Excluding.nonsynonymous..and.synonymous=NULL)
-G.score.rest.new.odd.mutations <- left_join(rest.new.odd.mutations,G.score.temp) %>% mutate(odd=NULL,Coding.length=NULL,Start.position=NULL,introgression.score=NULL,mutation=NULL,mut.type=NULL,lbl=NULL,reference=NULL,Gene.order=NULL) %>% na.omit() %>% arrange(desc(G.score))
-
-## get average G.score of genes mutated in Ara+1, Ara-3, Ara-4.
-special.G.score <- filter(G.score.rest.new.odd.mutations, lineage == 'Ara+1'|lineage=='Ara-3'|lineage=='Ara-4') %>% summarize(mean.G.score=mean(G.score))
+## Run python align_replaced_mutations.py to get results for Table 3
+##in the paper, as well as the numbers in this section of the manuscript.
+##
+## 31 of the 60 replaced dN are in non-mutators, and these are shown in Table 3.
 
 #######################################################
-## Map recombination breakpoints. Currently breakpoints occur ON
+## Map recombination breakpoints. Breakpoints occur ON
 ## mutations, NOT between mutations.
 ## Main goal of this analysis is to make Figure 4,
 ## a plot of chunk length distributions.
@@ -634,7 +568,7 @@ index.segments <- function(segment.labels) {
 ## This function labels transitions, then labels and indexes segments,
 ## and then calculates changes to segment length due to indels.
 
-## It is important that the input gets grouped by variable 'group', so that
+## It is important that the input gets grouped by variable 'lineage' or 'genome', so that
 ## different genomes are processed separately.
 calc.indel.change <- function(genomes.df) {
     df <- genomes.df %>%
@@ -709,8 +643,8 @@ all.LTEE.chunks <- full_join(even.LTEE.chunks,odd.LTEE.chunks)
 LTEE.chunk.summary <- group_by(all.LTEE.chunks,genome) %>% summarize(LTEE.DNA=sum(chunk.length))
 all.chunk.summary <- full_join(K12.chunk.summary,LTEE.chunk.summary) %>% mutate(percent.donor=donor.DNA/(donor.DNA+LTEE.DNA))
 
-## find the number of greens in K-12 chunks out of total number of greens and reds in each
-## genome.
+## find the number of reds (replaced) in K-12 chunks out of total number of red and blues--
+## that is, all recipient markers--in each genome.
 genome.segments <- labeled.mutations %>% group_by(genome) %>%
     mutate(chunk.transitions=labels.to.chunks(lbl))
 
@@ -718,28 +652,35 @@ total.LTEE.markers <- labeled.mutations %>% group_by(genome) %>% filter(lbl=='2'
     filter(gene.annotation %in% top.G.score.genes$Gene.name) %>%
     filter(mut.annotation != 'dS') %>% summarize(LTEE.marker.count=n())
 
-green.markers <- labeled.mutations %>% group_by(genome) %>% filter(lbl=='4') %>%
+replaced.markers <- labeled.mutations %>% group_by(genome) %>% filter(lbl=='4') %>%
     filter(gene.annotation %in% top.G.score.genes$Gene.name) %>%
-    filter(mut.annotation != 'dS') %>% summarize(green.LTEE.marker.count=n())
+    filter(mut.annotation != 'dS') %>% summarize(replaced.LTEE.marker.count=n())
 
-## find the number of greens in K-12 chunks out of total number of greens and reds in each
-## genome.
-K12.deleted.markers <- labeled.mutations %>% group_by(genome) %>%
+## find the number of replaced in K-12 chunks
+##out of total number of replaced and reds in each genome.
+K12.replaced.markers <- labeled.mutations %>% group_by(genome) %>%
     mutate(in.K12=label.segments(lbl)) %>%
     filter(lbl=='4' & in.K12==TRUE) %>%
     filter(gene.annotation %in% top.G.score.genes$Gene.name) %>%
-    filter(mut.annotation != 'dS') %>% summarize(K12.deleted.LTEE.marker.count=n())
+    filter(mut.annotation != 'dS') %>% summarize(K12.replaced.LTEE.marker.count=n())
 
-deleted.marker.summary <- full_join(total.LTEE.markers,K12.deleted.markers) %>% mutate(percent.green=K12.deleted.LTEE.marker.count/LTEE.marker.count)
+replaced.marker.summary <- full_join(total.LTEE.markers,K12.replaced.markers) %>% mutate(percent.replaced=K12.replaced.LTEE.marker.count/LTEE.marker.count)
 
-donor.and.deleted.markers <- full_join(all.chunk.summary,deleted.marker.summary)
+donor.and.replaced.markers <- full_join(all.chunk.summary,replaced.marker.summary)
 ## write table to file for Rich to look at.
-write.csv(donor.and.deleted.markers,"../results/figures/percent-greens-in-donor.csv")
+write.csv(donor.and.replaced.markers,"../results/figures/percent-replaced-in-donor.csv")
 
 ##############################
 ## Make Figure 4 (chunk length distributions)
 
 all.odd.chunks <- full_join(odd.K12.chunks,odd.LTEE.chunks) %>%
+    ## change segment.type to Recipient or Donor
+    mutate(segment.type = ifelse(segment.type == 'K-12','K-12 Donor','Recipient')) %>%
+    ## reorder factor for plotting.
+    ungroup() %>%
+    mutate(lineage=factor(lineage,levels=levels(lineage)[c(7:12,1:6)]))
+
+all.even.chunks <- full_join(even.K12.chunks,even.LTEE.chunks) %>%
     ## change segment.type to Recipient or Donor
     mutate(segment.type = ifelse(segment.type == 'K-12','K-12 Donor','Recipient')) %>%
     ## reorder factor for plotting.
@@ -755,7 +696,17 @@ Fig4 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins
     theme(strip.background=element_blank()) +
     theme(panel.grid.minor.x=element_line(color='grey90',linetype="dashed"))
 
+Fig4B <- ggplot(all.even.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=35) +
+    facet_grid(lineage ~ segment.type, scales="free_y") +
+    theme_classic() +
+    xlab(expression("log"[10]*"(Segment Length)")) +
+    ylab("Count") +
+    theme(text=element_text(family="serif")) +
+    theme(strip.background=element_blank()) +
+    theme(panel.grid.minor.x=element_line(color='grey90',linetype="dashed"))
+
 ggsave("../results/figures/Fig4.pdf",Fig4,width=4,height=7)
+ggsave("../results/figures/Fig4B.pdf",Fig4B,width=4,height=7)
 
 ## STATISTICAL TEST:
 ## are the distributions of K-12 chunks (or LTEE chunks)
@@ -770,10 +721,110 @@ kruskal.test(chunk.length ~ lineage, data=odd.LTEE.chunks)
 
 ## omit mutators and weird ones.
 skip.me <- c("Ara+2","Ara-3","Ara-2", "Ara+3", "Ara+6")
-kruskal.test(chunk.length ~ lineage, data=filter(odd.K12.chunks,!lineage %in% skip.me))
-kruskal.test(chunk.length ~ lineage, data=filter(odd.LTEE.chunks,!lineage %in% skip.me))
+length.test.data <- filter(odd.K12.chunks,!lineage %in% skip.me)
+kruskal.test(chunk.length ~ lineage, data=length.test.data)
 
 ###################################
+## Table 4: Putative gene conversion events.
+## Started by looking for parallelism in new mutations: super strong parallelism
+##(multiple new mutations in the same gene is probably gene conversion or something.
+
+## first label mutations as in a K12.chunk or not.
+new.mutations <- calc.indel.change(odd.genomes) %>%
+    ## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
+    filter(lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>%
+    filter(lbl=='3')
+
+## First: get cases when 3 or more new mutations occur in the same gene in the
+## same odd-numbered genome (most likely not a new mutation but gene conversion).
+
+gene.convs <- group_by(new.mutations,lineage) %>% group_by(gene.annotation) %>% filter(n()>=3)
+
+gene.convs.summary <- group_by(gene.convs,gene.annotation) %>% summarize(uniq.lineage=length(unique(lineage)),mutcount=length(gene.annotation) ,total.pos=length(unique(position)))
+
+## write Table 4 out to file.
+write.csv(gene.convs.summary,"../results/figures/Table4.csv",row.names=FALSE,quote=FALSE)
+
+################################
+## compare replaced mutations to new (non-conversion) mutations.
+## first label mutations as in K12.chunk or not.
+replaced.mutations <- calc.indel.change(odd.genomes) %>%
+    filter(lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>%
+    filter(lbl=='4')
+
+rest.new.mutations <- group_by(new.mutations,lineage) %>% group_by(gene.annotation) %>% filter(n()<3)
+
+replaced.dN <- filter(replaced.mutations, mut.annotation=='dN')
+new.dN <- filter(rest.new.mutations,mut.annotation=='dN')
+new.not.dN <- filter(rest.new.mutations,mut.annotation!='dN')
+
+replaced.dN.summary <- group_by(replaced.dN,lineage) %>%
+    summarize(replaced=TRUE,count=n()) %>%
+    mutate(count=as.numeric(count)) %>%
+    arrange(lineage)
+
+new.dN.summary <- group_by(new.dN,lineage) %>%
+    summarize(replaced=FALSE,count=n()) %>%
+    mutate(count=as.numeric(count)) %>%
+    arrange(lineage)
+
+new.mutation.G.score <- filter(G.score.data, Gene.name %in% rest.new.mutations$gene.annotation)
+new.mutation.G.score.summary <- summarize(new.mutation.G.score,mean.G.score=mean(G.score))
+## mean G-score on new mutations is 13.
+
+##strong signal of selection on new dN:
+new.dN.G.score <- filter(G.score.data, Gene.name %in% new.dN$gene.annotation)
+new.dN.G.score.summary <- summarize(new.dN.G.score,mean.G.score=mean(G.score))
+## mean dN G-score is 33.76!
+new.not.dN.G.score <- filter(G.score.data, Gene.name %in% new.not.dN$gene.annotation)
+new.not.dN.G.score.summary <- summarize(new.not.dN.G.score,mean.G.score=mean(G.score))
+## mean non-dN G-score is 0.05066.
+gene.convs.G.score <- filter(G.score.data, Gene.name %in% gene.convs$gene.annotation)
+gene.convs.G.score.summary <- summarize(gene.convs.G.score,mean.G.score=mean(G.score))
+## while mean G-score is 0 for the gene conversion events.
+
+dN.gene.convs <- filter(gene.convs,mut.annotation=='dN')
+not.dN.gene.convs <- filter(gene.convs,mut.annotation!='dN')
+
+dN.gene.convs.G.score <- filter(G.score.data, Gene.name %in% dN.gene.convs$gene.annotation)
+not.dN.gene.convs.G.score <- filter(G.score.data, Gene.name %in% not.dN.gene.convs$gene.annotation)
+
+## Welch's two sample t-test on G-score difference between genes with
+## new mutations versus genes affected by gene conversion: p = 0.03839
+t.test(new.mutation.G.score$G.score,gene.convs.G.score$G.score)
+
+## just subsetting on dN: p = 0.03526.
+t.test(new.dN.G.score$G.score,rest.gene.convs.G.score$G.score)
+
+## for mutations other than dN: p = 0.3273.
+t.test(new.not.dN.G.score$G.score,not.dN.gene.convs.G.score$G.score)
+
+## how many new mutations occur in top G.score genes?
+top.new.odd.mutations <- filter(new.odd.mutations,gene.annotation %in% top.G.score.genes$Gene.name)
+## All in Ara+1 or Ara-4! Does this mean that because these had mutations removed, they get bigger beneficial mutations?
+## also note that Ara-4 lost a pykF allele and picked up a different pykF allele!
+
+#########################################################
+## Is recombination mutagenic? Do mutations occur in regions with
+## high levels of introgression?
+
+B.new.mutations <- filter(rest.new.mutations,K12.chunk==FALSE)
+
+rest.new.dS <- filter(B.new.mutations,mut.annotation=='dS')
+rest.new.noncoding <- filter(B.new.mutations,mut.annotation=='non-coding')
+
+B.new.even.dS <- calc.indel.change(even.genomes) %>%
+    ## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
+    filter(lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>%
+    filter(lbl=='3') %>% group_by(lineage,gene.annotation) %>% filter(n()<3) %>%
+    filter(mut.annotation=='dS') %>% filter(K12.chunk==FALSE)
+
+all.new.dS <- rbind(rest.new.dS,B.new.even.dS) %>% distinct(.keep_all=TRUE)
+
+## No evidence, after restricting to mutations in chunks of B--but evidence if
+## including mutations in chunks of K-12.
+
+#############################################################
 ## Table 5. New synonymous mutations in evolved clones.
 ## Tabulate dS and number of recombination chunks.
 ##calculate ratio of dS by recombination/dS by mutation
@@ -782,58 +833,67 @@ kruskal.test(chunk.length ~ lineage, data=filter(odd.LTEE.chunks,!lineage %in% s
 all.K12.chunk.count <- all.K12.chunks %>% group_by(genome) %>%
     summarize(recombination.events=n())
 
-recomb.mut.ratio.table <- filter(labeled.mutations,mut.annotation=='dS') %>%
-    group_by(genome) %>% mutate(recomb.dS=ifelse(lbl %in% c(1,4,6,7,8,9),1,0)) %>%
-    mutate(new.dS=ifelse(lbl==3,1,0)) %>%
-    summarise(tot.new.dS=sum(new.dS),tot.recomb.dS=sum(recomb.dS)) %>%
+recomb.mut.ratio.table <- group_by(labeled.mutations,genome) %>% calc.indel.change() %>%
+    filter(mut.annotation=='dS') %>%
+    group_by(genome) %>%
+    ## filter out mutations that occur in gene conversion tracts.
+    filter(!(position %in% gene.convs$position)) %>%
+    mutate(recomb.dS=ifelse(lbl %in% c(1,4,6,7,8,9),1,0)) %>%
+    ## look at dS in K-12 chunk separately: dS might have occurred in donor before STLE.
+    mutate(LTEE.chunk.new.dS=ifelse(lbl==3 & K12.chunk==FALSE,1,0)) %>%
+    mutate(K12.chunk.new.dS=ifelse(lbl==3 & K12.chunk==TRUE,1,0)) %>%
+    summarise(tot.LTEE.new.dS=sum(LTEE.chunk.new.dS),
+              tot.K12.new.dS=sum(K12.chunk.new.dS),
+              tot.recomb.dS=sum(recomb.dS)) %>%
     left_join(all.K12.chunk.count) %>%
-    mutate(dS.r.over.m.ratio=tot.recomb.dS/tot.new.dS) %>%
-    mutate(event.r.over.m.ratio=recombination.events/tot.new.dS)
+    mutate(upper.dS.r.over.m.ratio=tot.recomb.dS/tot.LTEE.new.dS) %>%
+    mutate(lower.dS.r.over.m.ratio=tot.recomb.dS/(tot.LTEE.new.dS+tot.K12.new.dS))
 
 write.csv(recomb.mut.ratio.table,"../results/figures/Table5_recomb_mut_ratio.csv",row.names=FALSE,quote=FALSE)
 
-####################################################################################################
-## Figure 5. Ara-3 clones have the F-plasmid.
+################################################################################
+############## Fig. 5: Number of donor specific mutations in each clone.
+## NOTE: donor.mutations is defined around Fig. 2B code.
+donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summarise(count=n())
 
-Fig5.data <- STLE.clone.F.coverage %>% filter(Strain.Type != 'Recipient')
+Fig5 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif")) + guides(fill=FALSE)
+ggsave("../results/figures/Fig5.pdf",Fig5,width=6,height=4)
 
-Fig5A.data <- Fig5.data %>% filter (Lineage == 'Ara-3')
-Fig5B.data <- Fig5.data %>% filter (Lineage == 'Donor')
-Fig5C.data <- Fig5.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
+####################
+## Figure 6. Ara-3 clones have the F-plasmid.
+
+Fig6.data <- STLE.clone.F.coverage %>% filter(Strain.Type != 'Recipient')
+
+Fig6A.data <- Fig5.data %>% filter (Lineage == 'Ara-3')
+Fig6B.data <- Fig5.data %>% filter (Lineage == 'Donor')
+Fig6C.data <- Fig5.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
 
 ## plot the Ara-3 clone F coverage in shades of orange.
-Fig5A <- ggplot(data=Fig5A.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
+Fig6A <- ggplot(data=Fig6A.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
     geom_line() +
     theme_tufte() +
     guides(color=FALSE) +
     scale_color_manual(values=c('#feedde','#fdbe85','#fd8d3c','#d94701'))
 
 ## keep default colors so that donor colors match with other figures.
-Fig5B <- ggplot(data=Fig5B.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
+Fig6B <- ggplot(data=Fig6B.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
     geom_line() +
     theme_tufte() +
     guides(color=FALSE)
 
 ## plot the rest of the recombinant clones in shades of grey.
-Fig5C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Clone)) +
+Fig6C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Clone)) +
     geom_line() +
     theme_tufte() +
     guides(color=FALSE) +
     scale_colour_grey()
 
 ## arrange panes with cowplot.
-Fig5 <- plot_grid(Fig5A, Fig5B, Fig5C, labels = c("A", "B", "C"), ncol = 1)
+Fig6 <- plot_grid(Fig6A, Fig6B, Fig6C, labels = c("A", "B", "C"), ncol = 1)
 save_plot("../results/figures/Fig5.pdf", Fig5, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
 
 ## clean up memory.
-rm(Fig5.data,Fig5A.data,Fig5B.data,Fig5C.data)
-
-############## Fig. 6: Number of donor specific mutations in each clone.
-## NOTE: donor.mutations is defined around Fig. 2B code.
-donor.mutations.summary <- donor.mutations %>% group_by(genome,lbl) %>% summarise(count=n())
-
-Fig6 <- ggplot(donor.mutations, aes(x=genome,fill=lbl)) + geom_bar() + theme_tufte() + ylab("Number of donor-specific markers") + xlab("Clone") + scale_fill_discrete(name='Donor',labels=c('REL288','REL291','REL296','REL298')) + theme(axis.text.x=element_text(angle=45, hjust=1)) + theme(text=element_text(family="serif")) + guides(fill=FALSE)
-ggsave("../results/figures/Fig6.pdf",Fig6,width=6,height=4)
+rm(Fig6.data,Fig6A.data,Fig6B.data,Fig6C.data)
 
 ###############################################################################################
 ## Analyze evolution experiment results.
@@ -1043,15 +1103,15 @@ ggsave("../results/figures/Fig8.pdf", Fig8,width=8,height=10)
 scored.LCA <- score.introgression(inferred.LCA)
 LCA.introgressed.genes <- get.introgressed.genes(scored.LCA)
 
-Fig9 <- makeFig3(scored.LCA,auxotrophs,hfrs)
-ggsave("../results/figures/Fig9.pdf",Fig9,height=2.5,width=6)
+FigS5 <- makeFig2A(scored.LCA,auxotrophs,hfrs)
+ggsave("../results/figures/FigS5.pdf",FigS5,height=2.5,width=6)
 ## NOTE: fix delta symbol in Illustrator.
 
 ########################################
-## Figure S5: F-plasmid coverage in STLE continuation experiment
+## Figure S6: F-plasmid coverage in STLE continuation experiment
 ## at generation 1000 and 1200.
 
-FigS5 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1),color=Lineage)) +
+FigS6 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1),color=Lineage)) +
     geom_line() +
     theme_tufte() +
     ylab(expression("log"[10]*"(Coverage + 1)")) +
@@ -1059,4 +1119,4 @@ FigS5 <- ggplot(data=STLE.evoexp.F.coverage,aes(x=Position,y=log10(Coverage + 1)
     guides(color=FALSE) +
     facet_grid(Lineage ~ Generation,labeller=labeller(Generation = c('1000'='Generation 1000','1200'='Generation 1200')))
 
-ggsave("../results/figures/FigS5.pdf",FigS5)
+ggsave("../results/figures/FigS6.pdf",FigS6)
