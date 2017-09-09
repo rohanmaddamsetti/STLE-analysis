@@ -145,7 +145,9 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
     last_deletion_end = -1
     for i in relevant_coords:
         label = ''
-        if i in recombinant_dict:
+        if i < last_deletion_end: ## this marker is within a deleted region in the recombinant.
+            label = '5'
+        elif i in recombinant_dict:
             if 'DEL' in recombinant_dict[i]:
                 del_data = recombinant_dict[i].split(',')
                 last_deletion_end = int(del_data[3]) + i
@@ -167,9 +169,6 @@ def label_mutations(donor_dictz, recipient_dict, recombinant_dict, recombinant_n
             label = '0' ## this K-12 marker did not make it, site in REL606 state.
         elif i in recipient_dict:
             label = '4' ## this LTEE marker did not make it, erased by K-12?
-
-        if i < last_deletion_end: ## this marker is within a deleted region in the recombinant.
-            label = '5'
 
         if label == '0':
             ## NOTE: an odd feature is that some K-12 markers have the same position

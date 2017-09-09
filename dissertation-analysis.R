@@ -211,7 +211,7 @@ donor.mutations <- filter(labeled.mutations,lbl == 6 | lbl==7 | lbl == 8 | lbl =
     mutate(genome=factor(paste(lineage,genome,sep=': '))) %>%
     arrange(genome) %>%
     ## reorder factor for plotting.
-    mutate(genome=factor(genome,levels=levels(genome)[c(11:18,1:10)])) %>%
+    mutate(genome=factor(genome,levels=levels(genome)[c(12:19,1:11)])) %>%
     select(-frequency) %>%
     arrange(genome,position) %>%
     distinct(genome, position, .keep_all = TRUE)
@@ -794,35 +794,36 @@ not.dN.gene.convs.G.score <- filter(G.score.data, Gene.name %in% not.dN.gene.con
 t.test(new.mutation.G.score$G.score,gene.convs.G.score$G.score)
 
 ## just subsetting on dN: p = 0.03526.
-t.test(new.dN.G.score$G.score,rest.gene.convs.G.score$G.score)
+t.test(new.dN.G.score$G.score,dN.gene.convs.G.score$G.score)
 
-## for mutations other than dN: p = 0.3273.
+## for mutations other than dN: p = 0.3269.
 t.test(new.not.dN.G.score$G.score,not.dN.gene.convs.G.score$G.score)
 
 ## how many new mutations occur in top G.score genes?
-top.new.odd.mutations <- filter(new.odd.mutations,gene.annotation %in% top.G.score.genes$Gene.name)
+top.new.mutations <- filter(new.mutations,gene.annotation %in% top.G.score.genes$Gene.name)
 ## All in Ara+1 or Ara-4! Does this mean that because these had mutations removed, they get bigger beneficial mutations?
 ## also note that Ara-4 lost a pykF allele and picked up a different pykF allele!
 
 #########################################################
-## Is recombination mutagenic? Do mutations occur in regions with
-## high levels of introgression?
+## Is recombination mutagenic?
 
 B.new.mutations <- filter(rest.new.mutations,K12.chunk==FALSE)
 
 rest.new.dS <- filter(B.new.mutations,mut.annotation=='dS')
 rest.new.noncoding <- filter(B.new.mutations,mut.annotation=='non-coding')
 
-B.new.even.dS <- calc.indel.change(even.genomes) %>%
+new.even.dS <- calc.indel.change(even.genomes) %>%
     ## omit mutator lineages (Ara+6,Ara+3,Ara-2) +6 is mutT, +3 is mutS, -2 is mutL mutator.
     filter(lineage != "Ara+6" & lineage != "Ara+3" & lineage != "Ara-2") %>%
     filter(lbl=='3') %>% group_by(lineage,gene.annotation) %>% filter(n()<3) %>%
     filter(mut.annotation=='dS') %>% filter(K12.chunk==FALSE)
 
+K12.new.odd.dS <- filter(rest.new.mutations,K12.chunk==TRUE)
+B.new.even.dS <- new.even.dS %>% filter(K12.chunk==FALSE)
+K12.new.even.dS <- new.even.dS %>% filter(K12.chunk==TRUE)
+
 all.new.dS <- rbind(rest.new.dS,B.new.even.dS) %>% distinct(.keep_all=TRUE)
 
-## No evidence, after restricting to mutations in chunks of B--but evidence if
-## including mutations in chunks of K-12.
 
 #############################################################
 ## Table 5. New synonymous mutations in evolved clones.
@@ -864,9 +865,9 @@ ggsave("../results/figures/Fig5.pdf",Fig5,width=6,height=4)
 
 Fig6.data <- STLE.clone.F.coverage %>% filter(Strain.Type != 'Recipient')
 
-Fig6A.data <- Fig5.data %>% filter (Lineage == 'Ara-3')
-Fig6B.data <- Fig5.data %>% filter (Lineage == 'Donor')
-Fig6C.data <- Fig5.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
+Fig6A.data <- Fig6.data %>% filter (Lineage == 'Ara-3')
+Fig6B.data <- Fig6.data %>% filter (Lineage == 'Donor')
+Fig6C.data <- Fig6.data %>% filter (Lineage != 'Ara-3' & Lineage != 'Donor')
 
 ## plot the Ara-3 clone F coverage in shades of orange.
 Fig6A <- ggplot(data=Fig6A.data,aes(x=Position,y=Coverage,color=Clone,group=Clone)) +
@@ -890,7 +891,7 @@ Fig6C <- ggplot(data=Fig6C.data,aes(x=Position,y=Coverage,color=Lineage,group=Cl
 
 ## arrange panes with cowplot.
 Fig6 <- plot_grid(Fig6A, Fig6B, Fig6C, labels = c("A", "B", "C"), ncol = 1)
-save_plot("../results/figures/Fig5.pdf", Fig5, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
+save_plot("../results/figures/Fig6.pdf", Fig6, ncol = 1, nrow = 3, base_aspect_ratio = 3,base_height=2)
 
 ## clean up memory.
 rm(Fig6.data,Fig6A.data,Fig6B.data,Fig6C.data)
