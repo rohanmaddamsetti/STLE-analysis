@@ -422,43 +422,6 @@ REL4398.diffs <- setdiff(REL4398.data,REL4397.data)
 
 REL4397.diffs2 <- REL4397.diffs %>% filter(mut.annotation!='dS',mut.annotation!='non-coding')
 REL4398.diffs2 <- REL4398.diffs %>% filter(mut.annotation!='dS',mut.annotation!='non-coding')
-########################################
-## Fig. S4: Does sequence divergence/conservation predict location of markers? NO.
-## REMEMBER: divergence and introgression is correlated-- since when there's no divergence,
-## all introgression events are undetectable! So, more divergence = better resolution of introgression.
-## this is extra clear when regressing sum(introgression) against divergence in the windows.
-
-REL606.LENGTH <- 4629812
-## use 556 bins. Each is 8327 bp long (integer divisors)
-bin.length <- REL606.LENGTH/556
-
-## BUG: yegZ dS mutation has NA introgression score; there are two mutations at the same position in yegZ in annotated_K-12.gd,
-## probably due to conflicting donor-specific mutations. This is very minor (only seems to affect one mutation)
-## so fix this later, if at all.
-
-introgression.vs.divergence.data <- left_join(K12.diff.data,odd.introgression.scores) %>%
-    ## bin mutations across the genome.
-    ## NOTE: equal size bins, NOT equal numbers of mutations!
-    mutate(my_bin=ceiling(position/bin.length)) %>% group_by(my_bin)
-
-two.classed.introgression.data <- introgression.vs.divergence.data %>%
-    summarize(introgression=ifelse(mean(introgression.score)>0,1,0),divergence=n())
-
-## no difference in divergence between regions with and without introgression. p = 0.9091.
-kruskal.test(divergence ~ introgression,data=two.classed.introgression.data)
-
-median.introgression.data <- introgression.vs.divergence.data %>%
-    summarize(median.introgression=median(introgression.score),divergence=n()) %>% filter(median.introgression > 0)
-
-introgression.divergence.model <- lm(median.introgression~divergence,data=median.introgression.data)
-confint(introgression.divergence.model)
-
-FigS4 <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
-    geom_jitter() + ylab("Median Introgression within Bin") + xlab("K-12 Differences within Bin") +
-    theme_tufte()
-
-ggsave("../results/figures/FigS4.pdf",FigS4,width=5,height=4)
-
 ##############################################################################
 ## Replaced mutations. Table 3 and Figure 3 (Fig. 3 is made separately).
 
@@ -670,6 +633,119 @@ donor.and.replaced.markers <- full_join(all.chunk.summary,replaced.marker.summar
 ## write table to file for Rich to look at.
 write.csv(donor.and.replaced.markers,"../results/figures/percent-replaced-in-donor.csv")
 
+########################################
+## Fig. S4: Does sequence divergence/conservation predict location of markers? NO.
+## REMEMBER: divergence and introgression is correlated-- since when there's no divergence,
+## all introgression events are undetectable! So, more divergence = better resolution of introgression.
+## this is extra clear when regressing sum(introgression) against divergence in the windows.
+
+REL606.LENGTH <- 4629812
+## use 556 bins. Each is 8327 bp long (integer divisors)
+bin.length <- REL606.LENGTH/556
+
+## BUG: yegZ dS mutation has NA introgression score; there are two mutations at the same position in yegZ in annotated_K-12.gd,
+## probably due to conflicting donor-specific mutations. This is very minor (only seems to affect one mutation)
+## so fix this later, if at all.
+
+introgression.vs.divergence.data <- left_join(K12.diff.data,odd.introgression.scores) %>%
+    ## bin mutations across the genome.
+    ## NOTE: equal size bins, NOT equal numbers of mutations!
+    mutate(my_bin=ceiling(position/bin.length)) %>% group_by(my_bin)
+
+two.class.introgression.data <- introgression.vs.divergence.data %>%
+    summarize(introgression=factor(ifelse(median(introgression.score)>0,'Positive','Zero'),
+                                   levels=c('Zero','Positive')),divergence=n())
+
+## no difference in divergence between regions with and without introgression. p = 0.9235.
+kruskal.test(divergence ~ introgression,data=two.classed.introgression.data)
+
+median.introgression.data <- introgression.vs.divergence.data %>%
+    summarize(median.introgression=median(introgression.score),divergence=n())
+
+## plot whole distribution.
+FigS4A <- ggplot(median.introgression.data,aes(x=divergence, y=median.introgression)) +
+    geom_jitter() + ylab("Median Introgression within Bin") +
+    xlab("K-12 Differences within Bin") +
+    theme_tufte(base_size=12)
+
+cor.test(x=median.introgression.data$divergence, y=median.introgression.data$median.introgression, method = 'spearman',exact=FALSE)
+
+## plot zero introgression vs. positive introgression categories.
+FigS4B <- ggplot(two.class.introgression.data,aes(x=divergence,y=introgression)) +
+    geom_jitter() +
+    ylab("Median Introgression within Bin") +
+    xlab("K-12 Differences within Bin") +
+    theme_tufte(base_size=12)
+
+#####
+## Recombination breakpoints correlate with sequence divergence!!
+divergence.data <- K12.diff.data %>%
+    mutate(my_bin=ceiling(position/bin.length)) %>%
+    group_by(my_bin) %>% summarize(divergence=n())
+
+junctions.in.bins <- odd.genome.chunks %>%
+    mutate(my_bin=ceiling(position/bin.length)) %>%
+    group_by(my_bin) %>% summarize(junctions=n())
+
+junctions.vs.divergence <- left_join(divergence.data,junctions.in.bins) %>%
+    ## turn NA values in the join to 0.
+    mutate(junctions=ifelse(is.na(junctions),0,junctions)) %>%
+    mutate(are.junctions=factor(ifelse(junctions>0,'Positive','Zero'),
+                                levels=c('Zero','Positive')))
+
+## spearman correlation = 0.17, p-value < 0.0001.
+cor.test(x=junctions.vs.divergence$divergence, y=junctions.vs.divergence$junctions, method = 'spearman',exact=FALSE)
+
+## there is a difference in divergence between regions with and without junctions.
+## p = 0.01994.
+kruskal.test(divergence ~ are.junctions,data=junctions.vs.divergence)
+
+FigS4C <- ggplot(junctions.vs.divergence,aes(x=divergence,y=junctions)) +
+    theme_tufte(base_size=12) +
+    geom_jitter() +
+    ylab("Breakpoints within Bin") +
+    xlab("K-12 Differences within Bin")
+
+FigS4D <- ggplot(junctions.vs.divergence,aes(x=divergence,y=are.junctions)) +
+    theme_tufte(base_size=12) +
+    geom_jitter() +
+    ylab("Breakpoints within Bin") +
+    xlab("K-12 Differences within Bin")
+
+FigS4 <- plot_grid(FigS4A, FigS4B, FigS4C, FigS4D, labels = c("A", "B", "C", "D"),ncol=2)
+##ggsave("/Users/Rohandinho/Desktop/FigS4.pdf",FigS4,width=6.5,height=6.5)
+ggsave("../results/figures/FigS4.pdf",FigS4,width=7,height=7)
+
+##########  Look at 1-2 and 2-1 breakpoints separately.
+
+left.junctions.in.bins <- odd.genome.chunks %>%
+    filter(chunk.transitions=='1-2') %>%
+    mutate(my_bin=ceiling(position/bin.length)) %>%
+    group_by(my_bin) %>% summarize(junctions=n())
+
+left.junctions.vs.divergence <- left_join(divergence.data,left.junctions.in.bins) %>%
+    ## turn NA values in the join to 0.
+    mutate(junctions=ifelse(is.na(junctions),0,junctions)) %>%
+    mutate(are.junctions=ifelse(junctions>0,0,1))
+
+## there is a difference in divergence between regions with and without left junctions.
+## p = 0.002272.
+kruskal.test(divergence ~ are.junctions,data=left.junctions.vs.divergence)
+
+right.junctions.in.bins <- odd.genome.chunks %>%
+    filter(chunk.transitions=='2-1') %>%
+    mutate(my_bin=ceiling(position/bin.length)) %>%
+    group_by(my_bin) %>% summarize(junctions=n())
+
+right.junctions.vs.divergence <- left_join(divergence.data,right.junctions.in.bins) %>%
+    ## turn NA values in the join to 0.
+    mutate(junctions=ifelse(is.na(junctions),0,junctions)) %>%
+    mutate(are.junctions=ifelse(junctions>0,0,1))
+
+## there is a difference in divergence between regions with and without right junctions.
+## p = 0.001135.
+kruskal.test(divergence ~ are.junctions,data=right.junctions.vs.divergence)
+
 ##############################
 ## Make Figure 4 (chunk length distributions)
 
@@ -690,7 +766,7 @@ all.even.chunks <- full_join(even.K12.chunks,even.LTEE.chunks) %>%
 Fig4 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=35) +
     facet_grid(lineage ~ segment.type, scales="free_y") +
     theme_classic() +
-    xlab(expression("log"[10]*"(Segment Length)")) +
+    xlab(expression("log"[10]*"(bp)")) +
     ylab("Count") +
     theme(text=element_text(family="serif")) +
     theme(strip.background=element_blank()) +
@@ -699,14 +775,14 @@ Fig4 <- ggplot(all.odd.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins
 Fig4B <- ggplot(all.even.chunks, aes(x=log10(chunk.length))) + geom_histogram(bins=35) +
     facet_grid(lineage ~ segment.type, scales="free_y") +
     theme_classic() +
-    xlab(expression("log"[10]*"(Segment Length)")) +
+    xlab(expression("log"[10]*"(bp)")) +
     ylab("Count") +
     theme(text=element_text(family="serif")) +
     theme(strip.background=element_blank()) +
     theme(panel.grid.minor.x=element_line(color='grey90',linetype="dashed"))
 
-ggsave("../results/figures/Fig4.pdf",Fig4,width=4,height=7)
-ggsave("../results/figures/Fig4B.pdf",Fig4B,width=4,height=7)
+ggsave("../results/figures/Fig4.pdf",Fig4,width=5,height=7)
+ggsave("../results/figures/Fig4B.pdf",Fig4B,width=5,height=7)
 
 ## STATISTICAL TEST:
 ## are the distributions of K-12 chunks (or LTEE chunks)
@@ -965,7 +1041,14 @@ ggsave("../results/figures/new_mut_Fig7.pdf",new.plot,width=7.5,height=7.5)
 ## non-homologous E. coli B regions.
 
 ################
+## what are dynamics of markers in LTEE beneficial genes?
+top.LTEE.evoexp.markers <- evoexp.data %>% filter(gene.annotation %in% top.G.score.genes$Gene.name) %>% filter(initial.freq != 1 | final.freq != 1)
 
+top.markers.K12 <- top.LTEE.evoexp.markers %>% filter(lbl == 1)
+
+top.markers.K12.plot <- make.Fig7(top.markers.K12)
+ggsave("/Users/Rohandinho/Desktop/topK12markers.pdf",top.markers.K12.plot,width=7.5,height=7.5)
+##############
 ## How many replaced mutations fixed in the STLE and continuation?
 replaced.evoexp.mutations <- evoexp.data %>% filter(lbl==4)
 initial.erasures <- replaced.evoexp.mutations %>% filter(initial.freq == 1)
